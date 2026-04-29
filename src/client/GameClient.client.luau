@@ -1,6 +1,7 @@
 --!strict
 local Players = game:GetService('Players')
 local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local UserInputService = game:GetService('UserInputService')
 
 local player = Players.LocalPlayer
 local playerGui = player.PlayerGui
@@ -41,14 +42,50 @@ local function buildMenuUI()
   -- Coins display top
   local coinsLabel = Instance.new('TextLabel')
   coinsLabel.Name = 'CoinsLabel'
-  coinsLabel.Size = UDim2.fromScale(0.3, 0.06)
-  coinsLabel.Position = UDim2.fromScale(0.35, 0.02)
+  coinsLabel.Size = UDim2.fromScale(0.2, 0.06)
+  coinsLabel.Position = UDim2.fromScale(0.01, 0.12)
   coinsLabel.BackgroundTransparency = 1
   coinsLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
   coinsLabel.TextScaled = true
   coinsLabel.Font = Enum.Font.GothamBold
   coinsLabel.Text = '🪙 ' .. tostring(data.coins)
   coinsLabel.Parent = bg
+
+  local avatarViewport = Instance.new('ViewportFrame')
+  avatarViewport.Name = 'AvatarViewport'
+  avatarViewport.Size = UDim2.fromScale(0.15, 0.3)
+  avatarViewport.Position = UDim2.fromScale(0.425, 0.02)
+  avatarViewport.BackgroundColor3 = Color3.fromRGB(20, 25, 45)
+  avatarViewport.BackgroundTransparency = 0
+  avatarViewport.BorderSizePixel = 0
+  avatarViewport.ZIndex = 10
+  avatarViewport.Parent = bg
+
+  local avatarCorner = Instance.new('UICorner')
+  avatarCorner.CornerRadius = UDim.new(0, 12)
+  avatarCorner.Parent = avatarViewport
+
+  task.defer(function()
+    local success, result = pcall(function()
+      local humanoidDescription = Players:GetHumanoidDescriptionFromUserId(player.UserId)
+      local avatarModel =
+        Players:CreateHumanoidModelFromDescription(humanoidDescription, Enum.HumanoidRigType.R15)
+
+      local worldModel = Instance.new('WorldModel')
+      worldModel.Parent = avatarViewport
+
+      avatarModel:PivotTo(CFrame.new(0, 0, 0) * CFrame.Angles(0, math.pi, 0))
+      avatarModel.Parent = worldModel
+
+      local cam = Instance.new('Camera')
+      cam.CFrame = CFrame.new(Vector3.new(0, 3, 7), Vector3.new(0, 2, 0))
+      cam.Parent = avatarViewport
+      avatarViewport.CurrentCamera = cam
+    end)
+    if not success then
+      warn('Avatar viewport failed:', result)
+    end
+  end)
 
   -- Stats container
   local statsFrame = Instance.new('Frame')
@@ -135,6 +172,12 @@ local function buildMenuUI()
       upgradeCount = data.regenUpgrades
     end
     local cost = Config.UPGRADE_BASE_COST + (upgradeCount * Config.UPGRADE_COST_MULTIPLIER)
+    local benefitText = '(+10 HP)'
+    if stat.key == 'damage' then
+      benefitText = '(+5 DMG)'
+    elseif stat.key == 'regen' then
+      benefitText = '(+0.5 Regen)'
+    end
 
     local plusBtn = Instance.new('TextButton')
     plusBtn.Name = 'PlusBtn'
@@ -143,7 +186,7 @@ local function buildMenuUI()
     plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     plusBtn.TextScaled = true
     plusBtn.Font = Enum.Font.GothamBold
-    plusBtn.Text = '+' .. tostring(cost) .. '🪙'
+    plusBtn.Text = '+ ' .. tostring(cost) .. '🪙  ' .. benefitText
     plusBtn.Parent = row
 
     local btnCorner = Instance.new('UICorner')
@@ -348,6 +391,7 @@ end)
 -- IN-GAME UI
 local roundTimerLabel: TextLabel? = nil
 local difficultyLabel: TextLabel? = nil
+local difficultyProgressFill: Frame? = nil
 local hpBarFill: Frame? = nil
 local inGameCoinsLabel: TextLabel? = nil
 local inGameGui: ScreenGui? = nil
@@ -360,11 +404,11 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   screenGui.Parent = playerGui
   inGameGui = screenGui
 
-  -- Top center: Timer + Difficulty
+  -- Top center: Timer + Difficulty + Progress
   local topCenter = Instance.new('Frame')
   topCenter.Name = 'TopCenter'
-  topCenter.Size = UDim2.fromScale(0.3, 0.07)
-  topCenter.Position = UDim2.fromScale(0.35, 0.02)
+  topCenter.Size = UDim2.fromScale(0.35, 0.1)
+  topCenter.Position = UDim2.fromScale(0.325, 0.02)
   topCenter.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
   topCenter.BorderSizePixel = 0
   topCenter.Parent = screenGui
@@ -375,7 +419,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
 
   local timerLabel = Instance.new('TextLabel')
   timerLabel.Name = 'TimerLabel'
-  timerLabel.Size = UDim2.fromScale(1, 0.5)
+  timerLabel.Size = UDim2.fromScale(1, 0.35)
   timerLabel.Position = UDim2.fromScale(0, 0)
   timerLabel.BackgroundTransparency = 1
   timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -385,10 +429,34 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   timerLabel.Parent = topCenter
   roundTimerLabel = timerLabel
 
+  local progressBarBg = Instance.new('Frame')
+  progressBarBg.Name = 'DifficultyProgressBg'
+  progressBarBg.Size = UDim2.fromScale(0.9, 0.18)
+  progressBarBg.Position = UDim2.fromScale(0.05, 0.42)
+  progressBarBg.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+  progressBarBg.BorderSizePixel = 0
+  progressBarBg.Parent = topCenter
+
+  local progressBarCorner = Instance.new('UICorner')
+  progressBarCorner.CornerRadius = UDim.new(0, 6)
+  progressBarCorner.Parent = progressBarBg
+
+  local progressFill = Instance.new('Frame')
+  progressFill.Name = 'DifficultyProgressFill'
+  progressFill.Size = UDim2.fromScale(0, 1)
+  progressFill.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+  progressFill.BorderSizePixel = 0
+  progressFill.Parent = progressBarBg
+  difficultyProgressFill = progressFill
+
+  local progressFillCorner = Instance.new('UICorner')
+  progressFillCorner.CornerRadius = UDim.new(0, 6)
+  progressFillCorner.Parent = progressFill
+
   local diffLabel = Instance.new('TextLabel')
   diffLabel.Name = 'DifficultyLabel'
-  diffLabel.Size = UDim2.fromScale(1, 0.5)
-  diffLabel.Position = UDim2.fromScale(0, 0.5)
+  diffLabel.Size = UDim2.fromScale(1, 0.32)
+  diffLabel.Position = UDim2.fromScale(0, 0.64)
   diffLabel.BackgroundTransparency = 1
   diffLabel.TextColor3 = Color3.fromRGB(0, 200, 0)
   diffLabel.TextScaled = true
@@ -401,7 +469,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   local topLeft = Instance.new('Frame')
   topLeft.Name = 'TopLeft'
   topLeft.Size = UDim2.fromScale(0.2, 0.12)
-  topLeft.Position = UDim2.fromScale(0.01, 0.02)
+  topLeft.Position = UDim2.fromScale(0.01, 0.15)
   topLeft.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
   topLeft.BorderSizePixel = 0
   topLeft.Parent = screenGui
@@ -458,61 +526,118 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   -- Right side: Spawn controls
   local rightPanel = Instance.new('Frame')
   rightPanel.Name = 'RightPanel'
-  rightPanel.Size = UDim2.fromScale(0.18, 0.35)
-  rightPanel.Position = UDim2.fromScale(0.81, 0.3)
+  rightPanel.Size = UDim2.fromScale(0.21, 0.45)
+  rightPanel.Position = UDim2.fromScale(0.78, 0.25)
   rightPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
   rightPanel.BorderSizePixel = 0
   rightPanel.Parent = screenGui
 
   local rpCorner = Instance.new('UICorner')
-  rpCorner.CornerRadius = UDim.new(0, 10)
+  rpCorner.CornerRadius = UDim.new(0, 12)
   rpCorner.Parent = rightPanel
 
   local rpLayout = Instance.new('UIListLayout')
-  rpLayout.Padding = UDim.new(0, 6)
+  rpLayout.Padding = UDim.new(0, 10)
   rpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
   rpLayout.Parent = rightPanel
 
   local rpPadding = Instance.new('UIPadding')
-  rpPadding.PaddingTop = UDim.new(0, 8)
+  rpPadding.PaddingTop = UDim.new(0, 10)
   rpPadding.PaddingLeft = UDim.new(0, 8)
   rpPadding.PaddingRight = UDim.new(0, 8)
+  rpPadding.PaddingBottom = UDim.new(0, 10)
   rpPadding.Parent = rightPanel
 
   local spawnRateLabel = Instance.new('TextLabel')
-  spawnRateLabel.Size = UDim2.new(1, 0, 0, 24)
+  spawnRateLabel.Size = UDim2.new(1, 0, 0, 26)
   spawnRateLabel.BackgroundTransparency = 1
-  spawnRateLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  spawnRateLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
   spawnRateLabel.TextScaled = true
-  spawnRateLabel.Font = Enum.Font.Gotham
-  spawnRateLabel.Text = Localization.get('ui.spawn_rate') .. ': 1/s'
+  spawnRateLabel.Font = Enum.Font.GothamBold
+  spawnRateLabel.Text = Localization.get('ui.spawn_rate') .. ' (/s)'
   spawnRateLabel.Name = 'SpawnRateLabel'
   spawnRateLabel.Parent = rightPanel
 
-  local SpawnRateRemote = Instance.new('RemoteEvent')
-  SpawnRateRemote.Name = 'SetSpawnRate'
-
-  local spawnRateSlider = Instance.new('TextButton')
-  spawnRateSlider.Size = UDim2.new(1, 0, 0, 28)
+  local spawnRateSlider = Instance.new('Frame')
+  spawnRateSlider.Name = 'SpawnRateSlider'
+  spawnRateSlider.Size = UDim2.new(1, 0, 0, 24)
   spawnRateSlider.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
-  spawnRateSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
-  spawnRateSlider.TextScaled = true
-  spawnRateSlider.Font = Enum.Font.Gotham
-  spawnRateSlider.Text = 'Rate -  +'
+  spawnRateSlider.BorderSizePixel = 0
   spawnRateSlider.Parent = rightPanel
 
+  local spawnRateFill = Instance.new('Frame')
+  spawnRateFill.Name = 'Fill'
+  spawnRateFill.Size = UDim2.fromScale(0, 1)
+  spawnRateFill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+  spawnRateFill.BorderSizePixel = 0
+  spawnRateFill.Parent = spawnRateSlider
+
+  local spawnRateInput = Instance.new('TextButton')
+  spawnRateInput.Size = UDim2.fromScale(1, 1)
+  spawnRateInput.BackgroundTransparency = 1
+  spawnRateInput.Text = ''
+  spawnRateInput.Parent = spawnRateSlider
+
+  local spawnRateValueLabel = Instance.new('TextLabel')
+  spawnRateValueLabel.Size = UDim2.new(1, 0, 0, 20)
+  spawnRateValueLabel.BackgroundTransparency = 1
+  spawnRateValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  spawnRateValueLabel.TextScaled = true
+  spawnRateValueLabel.Font = Enum.Font.Gotham
+  spawnRateValueLabel.Text = '1.0'
+  spawnRateValueLabel.Parent = rightPanel
+
   local maxEnemiesLabel = Instance.new('TextLabel')
-  maxEnemiesLabel.Size = UDim2.new(1, 0, 0, 24)
+  maxEnemiesLabel.Size = UDim2.new(1, 0, 0, 26)
   maxEnemiesLabel.BackgroundTransparency = 1
-  maxEnemiesLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  maxEnemiesLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
   maxEnemiesLabel.TextScaled = true
-  maxEnemiesLabel.Font = Enum.Font.Gotham
-  maxEnemiesLabel.Text = 'Max: 20'
+  maxEnemiesLabel.Font = Enum.Font.GothamBold
+  maxEnemiesLabel.Text = Localization.get('ui.max_enemies')
   maxEnemiesLabel.Name = 'MaxEnemiesLabel'
   maxEnemiesLabel.Parent = rightPanel
 
+  local maxEnemiesSlider = Instance.new('Frame')
+  maxEnemiesSlider.Name = 'MaxEnemiesSlider'
+  maxEnemiesSlider.Size = UDim2.new(1, 0, 0, 24)
+  maxEnemiesSlider.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
+  maxEnemiesSlider.BorderSizePixel = 0
+  maxEnemiesSlider.Parent = rightPanel
+
+  local maxEnemiesFill = Instance.new('Frame')
+  maxEnemiesFill.Name = 'Fill'
+  maxEnemiesFill.Size = UDim2.fromScale(0, 1)
+  maxEnemiesFill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+  maxEnemiesFill.BorderSizePixel = 0
+  maxEnemiesFill.Parent = maxEnemiesSlider
+
+  local maxEnemiesInput = Instance.new('TextButton')
+  maxEnemiesInput.Size = UDim2.fromScale(1, 1)
+  maxEnemiesInput.BackgroundTransparency = 1
+  maxEnemiesInput.Text = ''
+  maxEnemiesInput.Parent = maxEnemiesSlider
+
+  local maxEnemiesValueLabel = Instance.new('TextLabel')
+  maxEnemiesValueLabel.Size = UDim2.new(1, 0, 0, 20)
+  maxEnemiesValueLabel.BackgroundTransparency = 1
+  maxEnemiesValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  maxEnemiesValueLabel.TextScaled = true
+  maxEnemiesValueLabel.Font = Enum.Font.Gotham
+  maxEnemiesValueLabel.Text = '20'
+  maxEnemiesValueLabel.Parent = rightPanel
+
+  local SetSpawnRateRemote = Remotes:WaitForChild('SetSpawnRate') :: RemoteEvent
+  local applyBtn = Instance.new('TextButton')
+  applyBtn.Size = UDim2.new(1, 0, 0, 34)
+  applyBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 110)
+  applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+  applyBtn.TextScaled = true
+  applyBtn.Font = Enum.Font.GothamBold
+  applyBtn.Text = 'Apply'
+  applyBtn.Parent = rightPanel
+
   local killAllBtn = Instance.new('TextButton')
-  killAllBtn.Size = UDim2.new(1, 0, 0, 32)
+  killAllBtn.Size = UDim2.new(1, 0, 0, 34)
   killAllBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
   killAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
   killAllBtn.TextScaled = true
@@ -524,8 +649,72 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   kaCorner.CornerRadius = UDim.new(0, 8)
   kaCorner.Parent = killAllBtn
 
+  local applyCorner = Instance.new('UICorner')
+  applyCorner.CornerRadius = UDim.new(0, 8)
+  applyCorner.Parent = applyBtn
+
   -- Wire up Kill All
   local KillAllRemote = Remotes:WaitForChild('KillAll') :: RemoteEvent
+  local spawnRateValue = 1
+  local maxEnemiesValue = 20
+  local draggingSpawn = false
+  local draggingMax = false
+
+  local function updateSpawnFromAlpha(alpha: number)
+    local clamped = math.clamp(alpha, 0, 1)
+    spawnRateValue = math.floor((1 + (9 * clamped)) * 10 + 0.5) / 10
+    spawnRateFill.Size = UDim2.fromScale((spawnRateValue - 1) / 9, 1)
+    spawnRateValueLabel.Text = string.format('%.1f', spawnRateValue)
+  end
+
+  local function updateMaxFromAlpha(alpha: number)
+    local clamped = math.clamp(alpha, 0, 1)
+    maxEnemiesValue = math.floor(1 + (49 * clamped) + 0.5)
+    maxEnemiesFill.Size = UDim2.fromScale((maxEnemiesValue - 1) / 49, 1)
+    maxEnemiesValueLabel.Text = tostring(maxEnemiesValue)
+  end
+
+  updateSpawnFromAlpha(0)
+  updateMaxFromAlpha((20 - 1) / 49)
+
+  local function sliderAlphaFromMouse(sliderFrame: Frame): number
+    local mouseX = UserInputService:GetMouseLocation().X
+    return (mouseX - sliderFrame.AbsolutePosition.X) / sliderFrame.AbsoluteSize.X
+  end
+
+  spawnRateInput.MouseButton1Down:Connect(function()
+    draggingSpawn = true
+    updateSpawnFromAlpha(sliderAlphaFromMouse(spawnRateSlider))
+  end)
+
+  maxEnemiesInput.MouseButton1Down:Connect(function()
+    draggingMax = true
+    updateMaxFromAlpha(sliderAlphaFromMouse(maxEnemiesSlider))
+  end)
+
+  UserInputService.InputEnded:Connect(function(input: InputObject)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+      draggingSpawn = false
+      draggingMax = false
+    end
+  end)
+
+  UserInputService.InputChanged:Connect(function(input: InputObject)
+    if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+      return
+    end
+    if draggingSpawn then
+      updateSpawnFromAlpha(sliderAlphaFromMouse(spawnRateSlider))
+    end
+    if draggingMax then
+      updateMaxFromAlpha(sliderAlphaFromMouse(maxEnemiesSlider))
+    end
+  end)
+
+  applyBtn.MouseButton1Click:Connect(function()
+    SetSpawnRateRemote:FireServer(spawnRateValue, maxEnemiesValue)
+  end)
+
   killAllBtn.MouseButton1Click:Connect(function()
     KillAllRemote:FireServer()
   end)
@@ -581,6 +770,10 @@ game:GetService('RunService').Heartbeat:Connect(function()
   if difficultyLabel then
     difficultyLabel.Text = Localization.get(diffKeyMap[currentDiff.label] or 'ui.difficulty_easy')
     difficultyLabel.TextColor3 = currentDiff.color
+  end
+  if difficultyProgressFill then
+    difficultyProgressFill.Size = UDim2.fromScale(math.clamp(elapsed / 240, 0, 1), 1)
+    difficultyProgressFill.BackgroundColor3 = currentDiff.color
   end
 end)
 

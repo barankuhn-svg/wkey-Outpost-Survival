@@ -145,6 +145,8 @@ type EnemyState = {
 local activeEnemies: { [string]: EnemyState } = {}
 local replicationData: { [string]: { px: number, py: number, pz: number, hp: number, maxHp: number } } =
   {}
+local enemyLastHitBy: { [string]: number } = {}
+local playerKills: { [number]: number } = {}
 
 local spawnRate = 1
 local maxEnemies = 20
@@ -232,10 +234,8 @@ local function spawnEnemy()
     return
   end
 
-  -- Random spawn position on arena edge
-  local angle = math.random() * math.pi * 2
-  local radius = 30
-  local spawnPos = Vector3.new(math.cos(angle) * radius, 2, math.sin(angle) * radius)
+  -- Random spawn position anywhere on arena
+  local spawnPos = Vector3.new(math.random(-35, 35), 2, math.random(-35, 35))
   model:PivotTo(CFrame.new(spawnPos))
   model.Parent = workspace
 
@@ -246,10 +246,23 @@ local function spawnEnemy()
   local animator = humanoid:FindFirstChildOfClass('Animator') or Instance.new('Animator')
   animator.Parent = humanoid
 
-  local walkTrack = animator:LoadAnimation(getRandomWalkAnim())
-  walkTrack:Play()
+  local walkTrack: AnimationTrack? = nil
+  local walkSuccess, walkResult = pcall(function()
+    return animator:LoadAnimation(getRandomWalkAnim())
+  end)
+  if walkSuccess and walkResult then
+    walkTrack = walkResult :: AnimationTrack
+    walkTrack.Looped = true
+    walkTrack:Play()
+  end
 
-  local punchTrack = animator:LoadAnimation(getRandomPunchAnim())
+  local punchTrack: AnimationTrack? = nil
+  local punchSuccess, punchResult = pcall(function()
+    return animator:LoadAnimation(getRandomPunchAnim())
+  end)
+  if punchSuccess and punchResult then
+    punchTrack = punchResult :: AnimationTrack
+  end
 
   local id = HttpService:GenerateGUID(false)
 
@@ -270,6 +283,18 @@ local function spawnEnemy()
 
   -- Death handling
   humanoid.Died:Connect(function()
+    if enemyState.walkAnimTrack then
+      enemyState.walkAnimTrack:Stop()
+    end
+    if enemyState.punchAnimTrack then
+      enemyState.punchAnimTrack:Stop()
+    end
+
+    local killerUserId = enemyLastHitBy[id]
+    if killerUserId then
+      playerKills[killerUserId] = (playerKills[killerUserId] or 0) + 1
+    end
+
     local reward = Config.COIN_REWARD[tier]
     for _, p in Players:GetPlayers() do
       local pdata = playerData[p.UserId]
@@ -282,6 +307,7 @@ local function spawnEnemy()
     EnemyDiedRemote:FireAllClients(id)
     activeEnemies[id] = nil
     replicationData[id] = nil
+    enemyLastHitBy[id] = nil
     model:Destroy()
   end)
 end
@@ -480,6 +506,7 @@ RunService.Heartbeat:Connect(function(dt: number)
       local id, enemy = getNearestEnemy(root.Position)
       if id and enemy then
         local dmg = getPlayerDamage(player)
+        enemyLastHitBy[id] = uid
         enemy.humanoid:TakeDamage(dmg)
         BeamUpdateRemote:FireAllClients(root.Position, enemy.rootPart.Position)
       else
@@ -498,6 +525,10 @@ local KillAllRemote = Instance.new('RemoteEvent')
 KillAllRemote.Name = 'KillAll'
 KillAllRemote.Parent = Remotes
 
+local SetSpawnRateRemote = Instance.new('RemoteEvent')
+SetSpawnRateRemote.Name = 'SetSpawnRate'
+SetSpawnRateRemote.Parent = Remotes
+
 local RoundStartedRemote = Instance.new('RemoteEvent')
 RoundStartedRemote.Name = 'RoundStarted'
 RoundStartedRemote.Parent = Remotes
@@ -509,6 +540,13 @@ KillAllRemote.OnServerEvent:Connect(function(_player: Player)
     end
   end
 end)
+
+SetSpawnRateRemote.OnServerEvent:Connect(
+  function(_player: Player, newSpawnRate: number, newMaxEnemies: number)
+    spawnRate = newSpawnRate
+    maxEnemies = newMaxEnemies
+  end
+)
 
 -- Fire RoundStarted to all clients when round begins
 StartRoundRemote.OnServerEvent:Connect(function(player: Player)
@@ -533,7 +571,6 @@ local function onPlayerDied(
 end
 
 -- Track kills per player
-local playerKills: { [number]: number } = {}
 
 Players.PlayerAdded:Connect(function(player: Player)
   playerKills[player.UserId] = 0
@@ -565,6 +602,7 @@ Players.PlayerAdded:Connect(function(player: Player)
         end
         activeEnemies[id] = nil
         replicationData[id] = nil
+        enemyLastHitBy[id] = nil
       end
       onPlayerDied(player, elapsed, coins, kills, currentDiff.label)
     end)
