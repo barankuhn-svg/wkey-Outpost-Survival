@@ -179,4 +179,110 @@ local function buildMenuUI()
   end)
 end
 
+local EnemyReplicateRemote = Remotes:WaitForChild('EnemyReplicate') :: RemoteEvent
+local EnemyDiedRemote = Remotes:WaitForChild('EnemyDied') :: RemoteEvent
+local CoinUpdateRemote = Remotes:WaitForChild('CoinUpdate') :: RemoteEvent
+local FloatingCoinRemote = Remotes:WaitForChild('FloatingCoin') :: RemoteEvent
+
+local localEnemyParts: { [string]: { root: Part, hpBar: Frame?, hpFill: Frame? } } = {}
+
+local function createLocalEnemy(id: string)
+  local root = Instance.new('Part')
+  root.Name = 'EnemyVisual_' .. id
+  root.Size = Vector3.new(2, 5, 2)
+  root.Anchored = true
+  root.CanCollide = false
+  root.Transparency = 1
+  root.Parent = workspace
+
+  -- HP Bar BillboardGui
+  local billboard = Instance.new('BillboardGui')
+  billboard.Size = UDim2.new(4, 0, 0.5, 0)
+  billboard.StudsOffset = Vector3.new(0, 4, 0)
+  billboard.AlwaysOnTop = false
+  billboard.Parent = root
+
+  local bg = Instance.new('Frame')
+  bg.Size = UDim2.fromScale(1, 1)
+  bg.BackgroundColor3 = Color3.fromRGB(50, 0, 0)
+  bg.BorderSizePixel = 0
+  bg.Parent = billboard
+
+  local fill = Instance.new('Frame')
+  fill.Name = 'Fill'
+  fill.Size = UDim2.fromScale(1, 1)
+  fill.BackgroundColor3 = Color3.fromRGB(220, 0, 0)
+  fill.BorderSizePixel = 0
+  fill.Parent = bg
+
+  localEnemyParts[id] = { root = root, hpBar = bg, hpFill = fill }
+end
+
+EnemyReplicateRemote.OnClientEvent:Connect(
+  function(data: { [string]: { px: number, py: number, pz: number, hp: number, maxHp: number } })
+    for id, state in data do
+      if not localEnemyParts[id] then
+        createLocalEnemy(id)
+      end
+      local parts = localEnemyParts[id]
+      parts.root.Position = Vector3.new(state.px, state.py, state.pz)
+      if parts.hpFill then
+        local ratio = math.clamp(state.hp / state.maxHp, 0, 1)
+        parts.hpFill.Size = UDim2.fromScale(ratio, 1)
+      end
+    end
+  end
+)
+
+EnemyDiedRemote.OnClientEvent:Connect(function(id: string)
+  local parts = localEnemyParts[id]
+  if parts then
+    parts.root:Destroy()
+    localEnemyParts[id] = nil
+  end
+end)
+
+CoinUpdateRemote.OnClientEvent:Connect(function(newCoins: number)
+  local gui = playerGui:FindFirstChild('MenuGui')
+  if gui then
+    local coins = gui:FindFirstChild('CoinsLabel', true)
+    if coins then
+      coins.Text = '🪙 ' .. tostring(newCoins)
+    end
+  end
+end)
+
+FloatingCoinRemote.OnClientEvent:Connect(function(pos: Vector3, amount: number)
+  local billboard = Instance.new('BillboardGui')
+  billboard.Size = UDim2.new(3, 0, 1, 0)
+  billboard.StudsOffset = Vector3.new(0, 3, 0)
+  billboard.AlwaysOnTop = true
+  billboard.Adornee = workspace.Terrain
+  billboard.Parent = workspace
+
+  local label = Instance.new('TextLabel')
+  label.Size = UDim2.fromScale(1, 1)
+  label.BackgroundTransparency = 1
+  label.TextColor3 = Color3.fromRGB(255, 215, 0)
+  label.TextScaled = true
+  label.Font = Enum.Font.GothamBold
+  label.Text = '+' .. tostring(amount) .. ' 🪙'
+  label.Parent = billboard
+
+  -- Position at world pos
+  local part = Instance.new('Part')
+  part.Anchored = true
+  part.CanCollide = false
+  part.Transparency = 1
+  part.Size = Vector3.one
+  part.Position = pos
+  part.Parent = workspace
+  billboard.Adornee = part
+
+  task.delay(1.5, function()
+    billboard:Destroy()
+    part:Destroy()
+  end)
+end)
+
 buildMenuUI()
