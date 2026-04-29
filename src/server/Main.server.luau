@@ -516,3 +516,71 @@ StartRoundRemote.OnServerEvent:Connect(function(player: Player)
   roundStartTime = tick()
   RoundStartedRemote:FireAllClients()
 end)
+
+-- DEATH SCREEN
+local PlayerDiedRemote = Instance.new('RemoteEvent')
+PlayerDiedRemote.Name = 'PlayerDied'
+PlayerDiedRemote.Parent = Remotes
+
+local function onPlayerDied(
+  player: Player,
+  elapsed: number,
+  coins: number,
+  kills: number,
+  difficulty: string
+)
+  PlayerDiedRemote:FireClient(player, elapsed, coins, kills, difficulty)
+end
+
+-- Track kills per player
+local playerKills: { [number]: number } = {}
+
+Players.PlayerAdded:Connect(function(player: Player)
+  playerKills[player.UserId] = 0
+  player.CharacterAdded:Connect(function(character: Model)
+    local humanoid = character:WaitForChild('Humanoid') :: Humanoid
+    local pdata = playerData[player.UserId]
+    if pdata then
+      humanoid.MaxHealth = Config.DEFAULT_HP + (pdata.hpUpgrades * Config.HP_PER_UPGRADE)
+      humanoid.Health = humanoid.MaxHealth
+    end
+    humanoid.Died:Connect(function()
+      if not roundActive then
+        return
+      end
+      roundActive = false
+      local elapsed = tick() - roundStartTime
+      local pdata2 = playerData[player.UserId]
+      local coins = pdata2 and pdata2.coins or 0
+      local kills = playerKills[player.UserId] or 0
+      local currentDiff = Config.DIFFICULTY[1]
+      for _, diff in Config.DIFFICULTY do
+        if elapsed >= diff.time then
+          currentDiff = diff
+        end
+      end
+      for id, enemy in activeEnemies do
+        if enemy.model.Parent then
+          enemy.model:Destroy()
+        end
+        activeEnemies[id] = nil
+        replicationData[id] = nil
+      end
+      onPlayerDied(player, elapsed, coins, kills, currentDiff.label)
+    end)
+  end)
+end)
+
+-- Track kills: increment when enemy dies
+-- Patch into humanoid.Died in spawnEnemy by firing this remote
+local KillCountRemote = Instance.new('RemoteEvent')
+KillCountRemote.Name = 'KillCount'
+KillCountRemote.Parent = Remotes
+
+KillCountRemote.OnServerEvent:Connect(function(player: Player)
+  playerKills[player.UserId] = (playerKills[player.UserId] or 0) + 1
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player)
+  playerKills[player.UserId] = nil
+end)

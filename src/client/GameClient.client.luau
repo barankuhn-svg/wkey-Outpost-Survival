@@ -582,4 +582,106 @@ CoinUpdateRemote.OnClientEvent:Connect(function(newCoins: number)
   end
 end)
 
+-- DEATH SCREEN
+local PlayerDiedRemote = Remotes:WaitForChild('PlayerDied') :: RemoteEvent
+
+local function buildDeathScreen(elapsed: number, coins: number, kills: number, difficulty: string)
+  if inGameGui then
+    inGameGui:Destroy()
+    inGameGui = nil
+  end
+  inRound = false
+
+  local screenGui = Instance.new('ScreenGui')
+  screenGui.Name = 'DeathGui'
+  screenGui.ResetOnSpawn = false
+  screenGui.IgnoreGuiInset = true
+  screenGui.Parent = playerGui
+
+  local bg = Instance.new('Frame')
+  bg.Size = UDim2.fromScale(1, 1)
+  bg.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+  bg.BackgroundTransparency = 0.3
+  bg.BorderSizePixel = 0
+  bg.Parent = screenGui
+
+  local panel = Instance.new('Frame')
+  panel.Size = UDim2.fromScale(0.4, 0.55)
+  panel.Position = UDim2.fromScale(0.3, 0.2)
+  panel.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
+  panel.BorderSizePixel = 0
+  panel.Parent = bg
+
+  local panelCorner = Instance.new('UICorner')
+  panelCorner.CornerRadius = UDim.new(0, 16)
+  panelCorner.Parent = panel
+
+  local layout = Instance.new('UIListLayout')
+  layout.Padding = UDim.new(0, 10)
+  layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+  layout.Parent = panel
+
+  local padding = Instance.new('UIPadding')
+  padding.PaddingTop = UDim.new(0, 20)
+  padding.PaddingBottom = UDim.new(0, 20)
+  padding.PaddingLeft = UDim.new(0, 16)
+  padding.PaddingRight = UDim.new(0, 16)
+  padding.Parent = panel
+
+  local titleLabel = Instance.new('TextLabel')
+  titleLabel.Size = UDim2.new(1, 0, 0, 50)
+  titleLabel.BackgroundTransparency = 1
+  titleLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+  titleLabel.TextScaled = true
+  titleLabel.Font = Enum.Font.GothamBold
+  titleLabel.Text = '💀 YOU DIED'
+  titleLabel.Parent = panel
+
+  local minutes = math.floor(elapsed / 60)
+  local seconds = math.floor(elapsed % 60)
+  local timeStr = string.format('%02d:%02d', minutes, seconds)
+
+  local stats = {
+    { label = '⏱️  Survived', value = timeStr },
+    { label = '🪙  Coins', value = tostring(coins) },
+    { label = '💀  Kills', value = tostring(kills) },
+    { label = '📈  Difficulty', value = difficulty },
+  }
+
+  for _, stat in stats do
+    local row = Instance.new('TextLabel')
+    row.Size = UDim2.new(1, 0, 0, 36)
+    row.BackgroundTransparency = 1
+    row.TextColor3 = Color3.fromRGB(200, 200, 200)
+    row.TextScaled = true
+    row.Font = Enum.Font.Gotham
+    row.Text = stat.label .. ':  ' .. stat.value
+    row.Parent = panel
+  end
+
+  local backBtn = Instance.new('TextButton')
+  backBtn.Size = UDim2.new(0.8, 0, 0, 44)
+  backBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+  backBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+  backBtn.TextScaled = true
+  backBtn.Font = Enum.Font.GothamBold
+  backBtn.Text = 'BACK TO MENU'
+  backBtn.Parent = panel
+
+  local btnCorner = Instance.new('UICorner')
+  btnCorner.CornerRadius = UDim.new(0, 10)
+  btnCorner.Parent = backBtn
+
+  backBtn.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+    buildMenuUI()
+  end)
+end
+
+PlayerDiedRemote.OnClientEvent:Connect(
+  function(elapsed: number, coins: number, kills: number, difficulty: string)
+    buildDeathScreen(elapsed, coins, kills, difficulty)
+  end
+)
+
 buildMenuUI()
