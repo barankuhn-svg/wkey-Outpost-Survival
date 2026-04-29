@@ -584,3 +584,42 @@ end)
 Players.PlayerRemoving:Connect(function(player: Player)
   playerKills[player.UserId] = nil
 end)
+
+-- REGEN SYSTEM
+local regenAccum: { [number]: number } = {}
+
+RunService.Heartbeat:Connect(function(dt: number)
+  if not roundActive then
+    return
+  end
+  for _, player in Players:GetPlayers() do
+    local char = player.Character
+    if not char then
+      continue
+    end
+    local humanoid = char:FindFirstChildOfClass('Humanoid')
+    if not humanoid then
+      continue
+    end
+    if humanoid.Health <= 0 then
+      continue
+    end
+
+    local uid = player.UserId
+    regenAccum[uid] = (regenAccum[uid] or 0) + dt
+
+    if regenAccum[uid] >= 1 then
+      regenAccum[uid] = 0
+      local pdata = playerData[uid]
+      if pdata then
+        local regenAmount = Config.DEFAULT_REGEN + (pdata.regenUpgrades * Config.REGEN_PER_UPGRADE)
+        local newHp = math.min(humanoid.Health + regenAmount, humanoid.MaxHealth)
+        humanoid.Health = newHp
+      end
+    end
+  end
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player)
+  regenAccum[player.UserId] = nil
+end)
