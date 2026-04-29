@@ -12,6 +12,7 @@ local UpgradeStatRemote = Remotes:WaitForChild('UpgradeStat') :: RemoteEvent
 local StartRoundRemote = Remotes:WaitForChild('StartRound') :: RemoteEvent
 
 local Config = require(ReplicatedStorage.Shared.Config)
+local Localization = require(ReplicatedStorage.Shared.Localization)
 
 -- Fetch data
 local function fetchData()
@@ -106,7 +107,7 @@ local function buildMenuUI()
     rowLayout.Parent = row
 
     local nameLabel = Instance.new('TextLabel')
-    nameLabel.Size = UDim2.new(0.5, 0, 1, 0)
+    nameLabel.Size = UDim2.fromScale(0.5, 1)
     nameLabel.BackgroundTransparency = 1
     nameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     nameLabel.TextScaled = true
@@ -117,7 +118,7 @@ local function buildMenuUI()
 
     local valueLabel = Instance.new('TextLabel')
     valueLabel.Name = 'Value'
-    valueLabel.Size = UDim2.new(0.25, 0, 1, 0)
+    valueLabel.Size = UDim2.fromScale(0.25, 1)
     valueLabel.BackgroundTransparency = 1
     valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     valueLabel.TextScaled = true
@@ -137,7 +138,7 @@ local function buildMenuUI()
 
     local plusBtn = Instance.new('TextButton')
     plusBtn.Name = 'PlusBtn'
-    plusBtn.Size = UDim2.new(0.2, 0, 0.8, 0)
+    plusBtn.Size = UDim2.fromScale(0.2, 0.8)
     plusBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 100)
     plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     plusBtn.TextScaled = true
@@ -166,7 +167,7 @@ local function buildMenuUI()
   startBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
   startBtn.TextScaled = true
   startBtn.Font = Enum.Font.GothamBold
-  startBtn.Text = 'START'
+  startBtn.Text = Localization.get('ui.start_button')
   startBtn.Parent = bg
 
   local startCorner = Instance.new('UICorner')
@@ -197,7 +198,7 @@ local function createLocalEnemy(id: string)
 
   -- HP Bar BillboardGui
   local billboard = Instance.new('BillboardGui')
-  billboard.Size = UDim2.new(4, 0, 0.5, 0)
+  billboard.Size = UDim2.fromScale(4, 0.5)
   billboard.StudsOffset = Vector3.new(0, 4, 0)
   billboard.AlwaysOnTop = false
   billboard.Parent = root
@@ -254,7 +255,7 @@ end)
 
 FloatingCoinRemote.OnClientEvent:Connect(function(pos: Vector3, amount: number)
   local billboard = Instance.new('BillboardGui')
-  billboard.Size = UDim2.new(3, 0, 1, 0)
+  billboard.Size = UDim2.fromScale(3, 1)
   billboard.StudsOffset = Vector3.new(0, 3, 0)
   billboard.AlwaysOnTop = true
   billboard.Adornee = workspace.Terrain
@@ -392,7 +393,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   diffLabel.TextColor3 = Color3.fromRGB(0, 200, 0)
   diffLabel.TextScaled = true
   diffLabel.Font = Enum.Font.GothamBold
-  diffLabel.Text = 'Easy'
+  diffLabel.Text = Localization.get('ui.difficulty_easy')
   diffLabel.Parent = topCenter
   difficultyLabel = diffLabel
 
@@ -428,7 +429,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   hpLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
   hpLabel.TextScaled = true
   hpLabel.Font = Enum.Font.Gotham
-  hpLabel.Text = '❤️ HP'
+  hpLabel.Text = '❤️ ' .. Localization.get('ui.hp')
   hpLabel.Parent = topLeft
 
   local hpBarBg = Instance.new('Frame')
@@ -484,7 +485,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   spawnRateLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
   spawnRateLabel.TextScaled = true
   spawnRateLabel.Font = Enum.Font.Gotham
-  spawnRateLabel.Text = 'Spawn Rate: 1/s'
+  spawnRateLabel.Text = Localization.get('ui.spawn_rate') .. ': 1/s'
   spawnRateLabel.Name = 'SpawnRateLabel'
   spawnRateLabel.Parent = rightPanel
 
@@ -516,7 +517,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   killAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
   killAllBtn.TextScaled = true
   killAllBtn.Font = Enum.Font.GothamBold
-  killAllBtn.Text = 'KILL ALL'
+  killAllBtn.Text = Localization.get('ui.kill_all')
   killAllBtn.Parent = rightPanel
 
   local kaCorner = Instance.new('UICorner')
@@ -565,13 +566,20 @@ game:GetService('RunService').Heartbeat:Connect(function()
   roundTimerLabel.Text = string.format('%02d:%02d', minutes, seconds)
 
   local currentDiff = Config.DIFFICULTY[1]
+  local diffKeyMap = {
+    Easy = 'ui.difficulty_easy',
+    Medium = 'ui.difficulty_medium',
+    Hard = 'ui.difficulty_hard',
+    Extreme = 'ui.difficulty_extreme',
+    ULTRA = 'ui.difficulty_ultra',
+  }
   for _, diff in Config.DIFFICULTY do
     if elapsed >= diff.time then
       currentDiff = diff
     end
   end
   if difficultyLabel then
-    difficultyLabel.Text = currentDiff.label
+    difficultyLabel.Text = Localization.get(diffKeyMap[currentDiff.label] or 'ui.difficulty_easy')
     difficultyLabel.TextColor3 = currentDiff.color
   end
 end)
@@ -634,7 +642,7 @@ local function buildDeathScreen(elapsed: number, coins: number, kills: number, d
   titleLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
   titleLabel.TextScaled = true
   titleLabel.Font = Enum.Font.GothamBold
-  titleLabel.Text = '💀 YOU DIED'
+  titleLabel.Text = '💀 ' .. Localization.get('ui.you_died')
   titleLabel.Parent = panel
 
   local minutes = math.floor(elapsed / 60)
@@ -642,9 +650,9 @@ local function buildDeathScreen(elapsed: number, coins: number, kills: number, d
   local timeStr = string.format('%02d:%02d', minutes, seconds)
 
   local stats = {
-    { label = '⏱️  Survived', value = timeStr },
-    { label = '🪙  Coins', value = tostring(coins) },
-    { label = '💀  Kills', value = tostring(kills) },
+    { label = '⏱️  ' .. Localization.get('ui.survived'), value = timeStr },
+    { label = '🪙  ' .. Localization.get('ui.coins'), value = tostring(coins) },
+    { label = '💀  ' .. Localization.get('ui.kills'), value = tostring(kills) },
     { label = '📈  Difficulty', value = difficulty },
   }
 
@@ -665,7 +673,7 @@ local function buildDeathScreen(elapsed: number, coins: number, kills: number, d
   backBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
   backBtn.TextScaled = true
   backBtn.Font = Enum.Font.GothamBold
-  backBtn.Text = 'BACK TO MENU'
+  backBtn.Text = Localization.get('ui.back_to_menu')
   backBtn.Parent = panel
 
   local btnCorner = Instance.new('UICorner')
