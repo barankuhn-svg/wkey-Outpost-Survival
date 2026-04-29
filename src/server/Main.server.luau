@@ -15,6 +15,7 @@ type PlayerData = {
 }
 
 local playerData: { [number]: PlayerData } = {}
+local playerDataLoaded: { [number]: boolean } = {}
 
 local function getDefaultData(): PlayerData
   return {
@@ -26,6 +27,7 @@ local function getDefaultData(): PlayerData
 end
 
 local function loadData(player: Player)
+  playerDataLoaded[player.UserId] = false
   local success, data = pcall(function()
     return PlayerDataStore:GetAsync('player_' .. player.UserId)
   end)
@@ -34,6 +36,7 @@ local function loadData(player: Player)
   else
     playerData[player.UserId] = getDefaultData()
   end
+  playerDataLoaded[player.UserId] = true
 end
 
 local function saveData(player: Player)
@@ -49,6 +52,7 @@ end
 Players.PlayerRemoving:Connect(function(player: Player)
   saveData(player)
   playerData[player.UserId] = nil
+  playerDataLoaded[player.UserId] = nil
 end)
 
 -- RemoteEvents Setup
@@ -70,6 +74,9 @@ StartRoundRemote.Parent = Remotes
 
 -- GetData: returns player data to client
 GetDataRemote.OnServerInvoke = function(player: Player)
+  if not playerDataLoaded[player.UserId] then
+    loadData(player)
+  end
   return playerData[player.UserId] or getDefaultData()
 end
 
@@ -112,6 +119,11 @@ end)
 local ServerStorage = game:GetService('ServerStorage')
 local RunService = game:GetService('RunService')
 local HttpService = game:GetService('HttpService')
+
+local waterGunTemplate = workspace:FindFirstChild('Water Gun')
+if waterGunTemplate then
+  waterGunTemplate.Parent = game:GetService('ServerStorage')
+end
 
 local EnemyRigsFolder = ServerStorage:WaitForChild('EnemyRigs')
 local enemyRigTemplates: { Model } = {}
@@ -469,12 +481,38 @@ RunService.Heartbeat:Connect(function(dt: number)
     if playerGunTimers[uid] >= (1 / Config.WATER_GUN_FIRE_RATE) then
       playerGunTimers[uid] = 0
 
-      local id, enemy = getNearestEnemy(root.Position)
+      local beamOrigin = root.Position
+      local waterGun = char:FindFirstChild('Water Gun')
+      if waterGun and waterGun:IsA('Model') then
+        local gunPrimaryPart = waterGun.PrimaryPart or waterGun:FindFirstChildWhichIsA('BasePart')
+        if gunPrimaryPart then
+          beamOrigin = gunPrimaryPart.Position
+        end
+      end
+
+      local id, enemy = getNearestEnemy(beamOrigin)
+      local humanoidRootPart = root
+      local waterGun = char:FindFirstChild('Water Gun')
+      if waterGun and enemy then
+        local gunPart = waterGun.PrimaryPart
+        if gunPart then
+          local weld = humanoidRootPart:FindFirstChildOfClass('Weld')
+          if weld then
+            local targetPos = enemy.rootPart.Position
+            local gunWorldPos = humanoidRootPart.CFrame * CFrame.new(0, 4, 0.5)
+            local lookDir = (targetPos - gunWorldPos.Position)
+            lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
+            local angle = math.atan2(-lookDir.X, -lookDir.Z) + math.pi * 0.5
+            weld.C0 = CFrame.new(0, 4, 0.5) * CFrame.Angles(0, angle, 0)
+          end
+        end
+      end
+
       if id and enemy then
         local dmg = getPlayerDamage(player)
         enemyLastHitBy[id] = uid
         enemy.humanoid:TakeDamage(dmg)
-        BeamUpdateRemote:FireAllClients(root.Position, enemy.rootPart.Position)
+        BeamUpdateRemote:FireAllClients(beamOrigin, enemy.rootPart.Position)
       else
         BeamUpdateRemote:FireAllClients(nil, nil)
       end
@@ -518,6 +556,12 @@ SetSpawnRateRemote.OnServerEvent:Connect(
 StartRoundRemote.OnServerEvent:Connect(function(_player: Player)
   roundActive = true
   roundStartTime = tick()
+  for _, p in Players:GetPlayers() do
+    local pdata = playerData[p.UserId]
+    if pdata then
+      CoinUpdateRemote:FireClient(p, pdata.coins)
+    end
+  end
   RoundStartedRemote:FireAllClients()
 end)
 
@@ -543,11 +587,59 @@ Players.PlayerAdded:Connect(function(player: Player)
   playerKills[player.UserId] = 0
   player.CharacterAdded:Connect(function(character: Model)
     local humanoid = character:WaitForChild('Humanoid') :: Humanoid
+    local humanoidRootPart = character:WaitForChild('HumanoidRootPart') :: BasePart
     local pdata = playerData[player.UserId]
     if pdata then
       humanoid.MaxHealth = Config.DEFAULT_HP + (pdata.hpUpgrades * Config.HP_PER_UPGRADE)
       humanoid.Health = humanoid.MaxHealth
     end
+
+    local waterGunModelTemplate = ServerStorage:FindFirstChild('Water Gun')
+    if waterGunModelTemplate and waterGunModelTemplate:IsA('Model') then
+      local clonedGun = waterGunModelTemplate:Clone()
+      local gunPrimaryPart: BasePart? = nil
+      local largestVolume = 0
+      for _, descendant in clonedGun:GetDescendants() do
+        if descendant:IsA('BasePart') then
+          local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
+          if volume > largestVolume then
+            largestVolume = volume
+            gunPrimaryPart = descendant
+          end
+        end
+      end
+      if gunPrimaryPart then
+        clonedGun.PrimaryPart = gunPrimaryPart
+      end
+      if gunPrimaryPart then
+        for _, descendant in clonedGun:GetDescendants() do
+          if descendant:IsA('BasePart') and descendant ~= gunPrimaryPart then
+            local wc = Instance.new('WeldConstraint')
+            wc.Part0 = gunPrimaryPart
+            wc.Part1 = descendant
+            wc.Parent = gunPrimaryPart
+          end
+        end
+
+        for _, descendant in clonedGun:GetDescendants() do
+          if descendant:IsA('BasePart') then
+            descendant.Anchored = false
+            descendant.CanCollide = false
+            descendant.Massless = true
+          end
+        end
+
+        clonedGun.Parent = character
+        clonedGun:PivotTo(humanoidRootPart.CFrame * CFrame.new(0, 4, 0.5))
+
+        local gunWeld = Instance.new('Weld')
+        gunWeld.Part0 = humanoidRootPart
+        gunWeld.Part1 = gunPrimaryPart
+        gunWeld.C0 = CFrame.new(0, 4, 0.5)
+        gunWeld.Parent = humanoidRootPart
+      end
+    end
+
     humanoid.Died:Connect(function()
       if not roundActive then
         return
