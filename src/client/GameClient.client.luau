@@ -5,6 +5,22 @@ local UserInputService = game:GetService('UserInputService')
 
 local player = Players.LocalPlayer
 local playerGui = player.PlayerGui
+local COIN_ICON_ASSET_ID = 'rbxassetid://133199082305118'
+
+local function addCoinIcon(parent: Instance, size: UDim2, position: UDim2)
+  local icon = Instance.new('ImageLabel')
+  icon.Name = 'CoinIcon'
+  icon.Size = size
+  icon.Position = position
+  icon.BackgroundTransparency = 1
+  icon.Image = COIN_ICON_ASSET_ID
+  icon.Parent = parent
+end
+
+local function setCoinLabel(label: TextLabel, amountText: string)
+  label.TextXAlignment = Enum.TextXAlignment.Left
+  label.Text = '      ' .. amountText
+end
 
 -- Wait for Remotes
 local Remotes = ReplicatedStorage:WaitForChild('Remotes')
@@ -48,8 +64,9 @@ local function buildMenuUI()
   coinsLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
   coinsLabel.TextScaled = true
   coinsLabel.Font = Enum.Font.GothamBold
-  coinsLabel.Text = '🪙 ' .. tostring(data.coins)
+  setCoinLabel(coinsLabel, tostring(data.coins))
   coinsLabel.Parent = bg
+  addCoinIcon(coinsLabel, UDim2.fromScale(0.12, 0.8), UDim2.fromScale(0.01, 0.1))
 
   local avatarViewport = Instance.new('ViewportFrame')
   avatarViewport.Name = 'AvatarViewport'
@@ -186,7 +203,12 @@ local function buildMenuUI()
     plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     plusBtn.TextScaled = true
     plusBtn.Font = Enum.Font.GothamBold
-    plusBtn.Text = '+ ' .. tostring(cost) .. '🪙  ' .. benefitText
+    plusBtn.Text = '+ '
+      .. tostring(cost)
+      .. ' '
+      .. Localization.get('ui.coins')
+      .. '  '
+      .. benefitText
     plusBtn.Parent = row
 
     local btnCorner = Instance.new('UICorner')
@@ -300,7 +322,7 @@ CoinUpdateRemote.OnClientEvent:Connect(function(newCoins: number)
   if gui then
     local coins = gui:FindFirstChild('CoinsLabel', true)
     if coins then
-      coins.Text = '🪙 ' .. tostring(newCoins)
+      setCoinLabel(coins :: TextLabel, tostring(newCoins))
     end
   end
 end)
@@ -313,14 +335,27 @@ FloatingCoinRemote.OnClientEvent:Connect(function(pos: Vector3, amount: number)
   billboard.Adornee = workspace.Terrain
   billboard.Parent = workspace
 
+  local container = Instance.new('Frame')
+  container.Size = UDim2.fromScale(1, 1)
+  container.BackgroundTransparency = 1
+  container.Parent = billboard
+
+  local icon = Instance.new('ImageLabel')
+  icon.Size = UDim2.fromScale(0.22, 0.8)
+  icon.Position = UDim2.fromScale(0.22, 0.1)
+  icon.BackgroundTransparency = 1
+  icon.Image = COIN_ICON_ASSET_ID
+  icon.Parent = container
+
   local label = Instance.new('TextLabel')
-  label.Size = UDim2.fromScale(1, 1)
+  label.Size = UDim2.fromScale(0.5, 1)
+  label.Position = UDim2.fromScale(0.45, 0)
   label.BackgroundTransparency = 1
   label.TextColor3 = Color3.fromRGB(255, 215, 0)
   label.TextScaled = true
   label.Font = Enum.Font.GothamBold
-  label.Text = '+' .. tostring(amount) .. ' 🪙'
-  label.Parent = billboard
+  label.Text = '+' .. tostring(amount)
+  label.Parent = container
 
   -- Position at world pos
   local part = Instance.new('Part')
@@ -506,8 +541,9 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   coinsLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
   coinsLabel.TextScaled = true
   coinsLabel.Font = Enum.Font.GothamBold
-  coinsLabel.Text = '🪙 0'
+  setCoinLabel(coinsLabel, '0')
   coinsLabel.Parent = topLeft
+  addCoinIcon(coinsLabel, UDim2.fromScale(0.1, 0.7), UDim2.fromScale(0.02, 0.15))
   inGameCoinsLabel = coinsLabel
 
   local hpLabel = Instance.new('TextLabel')
@@ -559,6 +595,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   local rpLayout = Instance.new('UIListLayout')
   rpLayout.Padding = UDim.new(0, 10)
   rpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+  rpLayout.SortOrder = Enum.SortOrder.LayoutOrder
   rpLayout.Parent = rightPanel
 
   local rpPadding = Instance.new('UIPadding')
@@ -576,6 +613,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   spawnRateLabel.Font = Enum.Font.GothamBold
   spawnRateLabel.Text = Localization.get('ui.spawn_rate') .. ' (/s)'
   spawnRateLabel.Name = 'SpawnRateLabel'
+  spawnRateLabel.LayoutOrder = 4
   spawnRateLabel.Parent = rightPanel
 
   local spawnRateSlider = Instance.new('Frame')
@@ -583,6 +621,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   spawnRateSlider.Size = UDim2.new(1, 0, 0, 24)
   spawnRateSlider.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
   spawnRateSlider.BorderSizePixel = 0
+  spawnRateSlider.LayoutOrder = 5
   spawnRateSlider.Parent = rightPanel
 
   local spawnRateFill = Instance.new('Frame')
@@ -598,14 +637,17 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   spawnRateInput.Text = ''
   spawnRateInput.Parent = spawnRateSlider
 
-  local spawnRateValueLabel = Instance.new('TextLabel')
-  spawnRateValueLabel.Size = UDim2.new(1, 0, 0, 20)
-  spawnRateValueLabel.BackgroundTransparency = 1
-  spawnRateValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-  spawnRateValueLabel.TextScaled = true
-  spawnRateValueLabel.Font = Enum.Font.Gotham
-  spawnRateValueLabel.Text = '1.0'
-  spawnRateValueLabel.Parent = rightPanel
+  local spawnRateValueInput = Instance.new('TextBox')
+  spawnRateValueInput.Size = UDim2.new(1, 0, 0, 28)
+  spawnRateValueInput.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+  spawnRateValueInput.TextColor3 = Color3.fromRGB(230, 230, 230)
+  spawnRateValueInput.TextScaled = true
+  spawnRateValueInput.Font = Enum.Font.Gotham
+  spawnRateValueInput.Text = '1.0'
+  spawnRateValueInput.ClearTextOnFocus = false
+  spawnRateValueInput.PlaceholderText = '1.0 - 10.0'
+  spawnRateValueInput.LayoutOrder = 6
+  spawnRateValueInput.Parent = rightPanel
 
   local maxEnemiesLabel = Instance.new('TextLabel')
   maxEnemiesLabel.Size = UDim2.new(1, 0, 0, 26)
@@ -615,6 +657,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   maxEnemiesLabel.Font = Enum.Font.GothamBold
   maxEnemiesLabel.Text = Localization.get('ui.max_enemies')
   maxEnemiesLabel.Name = 'MaxEnemiesLabel'
+  maxEnemiesLabel.LayoutOrder = 1
   maxEnemiesLabel.Parent = rightPanel
 
   local maxEnemiesSlider = Instance.new('Frame')
@@ -622,6 +665,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   maxEnemiesSlider.Size = UDim2.new(1, 0, 0, 24)
   maxEnemiesSlider.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
   maxEnemiesSlider.BorderSizePixel = 0
+  maxEnemiesSlider.LayoutOrder = 2
   maxEnemiesSlider.Parent = rightPanel
 
   local maxEnemiesFill = Instance.new('Frame')
@@ -637,14 +681,17 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   maxEnemiesInput.Text = ''
   maxEnemiesInput.Parent = maxEnemiesSlider
 
-  local maxEnemiesValueLabel = Instance.new('TextLabel')
-  maxEnemiesValueLabel.Size = UDim2.new(1, 0, 0, 20)
-  maxEnemiesValueLabel.BackgroundTransparency = 1
-  maxEnemiesValueLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-  maxEnemiesValueLabel.TextScaled = true
-  maxEnemiesValueLabel.Font = Enum.Font.Gotham
-  maxEnemiesValueLabel.Text = '20'
-  maxEnemiesValueLabel.Parent = rightPanel
+  local maxEnemiesValueInput = Instance.new('TextBox')
+  maxEnemiesValueInput.Size = UDim2.new(1, 0, 0, 28)
+  maxEnemiesValueInput.BackgroundColor3 = Color3.fromRGB(35, 35, 55)
+  maxEnemiesValueInput.TextColor3 = Color3.fromRGB(230, 230, 230)
+  maxEnemiesValueInput.TextScaled = true
+  maxEnemiesValueInput.Font = Enum.Font.Gotham
+  maxEnemiesValueInput.Text = '20'
+  maxEnemiesValueInput.ClearTextOnFocus = false
+  maxEnemiesValueInput.PlaceholderText = '1 - 50'
+  maxEnemiesValueInput.LayoutOrder = 3
+  maxEnemiesValueInput.Parent = rightPanel
 
   local SetSpawnRateRemote = Remotes:WaitForChild('SetSpawnRate') :: RemoteEvent
   local applyBtn = Instance.new('TextButton')
@@ -653,7 +700,8 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
   applyBtn.TextScaled = true
   applyBtn.Font = Enum.Font.GothamBold
-  applyBtn.Text = 'Apply'
+  applyBtn.Text = Localization.get('ui.apply')
+  applyBtn.LayoutOrder = 7
   applyBtn.Parent = rightPanel
 
   local killAllBtn = Instance.new('TextButton')
@@ -663,6 +711,7 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   killAllBtn.TextScaled = true
   killAllBtn.Font = Enum.Font.GothamBold
   killAllBtn.Text = Localization.get('ui.kill_all')
+  killAllBtn.LayoutOrder = 8
   killAllBtn.Parent = rightPanel
 
   local kaCorner = Instance.new('UICorner')
@@ -684,14 +733,39 @@ local function buildInGameUI(playerHumanoid: Humanoid)
     local clamped = math.clamp(alpha, 0, 1)
     spawnRateValue = math.floor((1 + (9 * clamped)) * 10 + 0.5) / 10
     spawnRateFill.Size = UDim2.fromScale((spawnRateValue - 1) / 9, 1)
-    spawnRateValueLabel.Text = string.format('%.1f', spawnRateValue)
+    spawnRateValueInput.Text = string.format('%.1f', spawnRateValue)
   end
 
   local function updateMaxFromAlpha(alpha: number)
     local clamped = math.clamp(alpha, 0, 1)
     maxEnemiesValue = math.floor(1 + (49 * clamped) + 0.5)
     maxEnemiesFill.Size = UDim2.fromScale((maxEnemiesValue - 1) / 49, 1)
-    maxEnemiesValueLabel.Text = tostring(maxEnemiesValue)
+    maxEnemiesValueInput.Text = tostring(maxEnemiesValue)
+  end
+
+  local function applySpawnRateInput()
+    local normalized = (spawnRateValueInput.Text or ''):gsub(',', '.')
+    local parsed = tonumber(normalized)
+    if not parsed then
+      spawnRateValueInput.Text = string.format('%.1f', spawnRateValue)
+      return
+    end
+    local clamped = math.clamp(parsed, 1, 10)
+    spawnRateValue = math.floor(clamped * 10 + 0.5) / 10
+    spawnRateFill.Size = UDim2.fromScale((spawnRateValue - 1) / 9, 1)
+    spawnRateValueInput.Text = string.format('%.1f', spawnRateValue)
+  end
+
+  local function applyMaxEnemiesInput()
+    local parsed = tonumber(maxEnemiesValueInput.Text)
+    if not parsed then
+      maxEnemiesValueInput.Text = tostring(maxEnemiesValue)
+      return
+    end
+    local clamped = math.clamp(math.floor(parsed + 0.5), 1, 50)
+    maxEnemiesValue = clamped
+    maxEnemiesFill.Size = UDim2.fromScale((maxEnemiesValue - 1) / 49, 1)
+    maxEnemiesValueInput.Text = tostring(maxEnemiesValue)
   end
 
   updateSpawnFromAlpha(0)
@@ -710,6 +784,22 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   maxEnemiesInput.MouseButton1Down:Connect(function()
     draggingMax = true
     updateMaxFromAlpha(sliderAlphaFromMouse(maxEnemiesSlider))
+  end)
+
+  spawnRateValueInput.FocusLost:Connect(function(enterPressed: boolean)
+    if enterPressed then
+      applySpawnRateInput()
+      return
+    end
+    applySpawnRateInput()
+  end)
+
+  maxEnemiesValueInput.FocusLost:Connect(function(enterPressed: boolean)
+    if enterPressed then
+      applyMaxEnemiesInput()
+      return
+    end
+    applyMaxEnemiesInput()
   end)
 
   UserInputService.InputEnded:Connect(function(input: InputObject)
@@ -817,7 +907,7 @@ end)
 
 CoinUpdateRemote.OnClientEvent:Connect(function(newCoins: number)
   if inGameCoinsLabel then
-    inGameCoinsLabel.Text = '🪙 ' .. tostring(newCoins)
+    setCoinLabel(inGameCoinsLabel, tostring(newCoins))
   end
 end)
 
@@ -887,7 +977,7 @@ local function buildDeathScreen(elapsed: number, coins: number, kills: number, d
 
   local stats = {
     { label = '⏱️  ' .. Localization.get('ui.survived'), value = timeStr },
-    { label = '🪙  ' .. Localization.get('ui.coins'), value = tostring(coins) },
+    { label = Localization.get('ui.coins'), value = tostring(coins) },
     { label = '💀  ' .. Localization.get('ui.kills'), value = tostring(kills) },
     { label = '📈  Difficulty', value = difficulty },
   }

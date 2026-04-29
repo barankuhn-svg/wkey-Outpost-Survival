@@ -19,9 +19,10 @@ arenaFolder.Parent = workspaceRef
 
 local arenaFloor = Instance.new('Part')
 arenaFloor.Name = 'ArenaFloor'
-arenaFloor.Size = Vector3.new(75, 1, 75)
-arenaFloor.Position = Vector3.new(0, 0, 0)
+arenaFloor.Size = Vector3.new(75, 4, 75)
+arenaFloor.Position = Vector3.new(0, -1.5, 0)
 arenaFloor.Anchored = true
+arenaFloor.CanCollide = true
 arenaFloor.Material = Enum.Material.SmoothPlastic
 arenaFloor.BrickColor = BrickColor.new('Medium stone grey')
 arenaFloor.Parent = arenaFolder

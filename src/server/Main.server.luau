@@ -2,6 +2,7 @@
 local Players = game:GetService('Players')
 local DataStoreService = game:GetService('DataStoreService')
 local ReplicatedStorage = game:GetService('ReplicatedStorage')
+local PhysicsService = game:GetService('PhysicsService')
 
 local Config = require(ReplicatedStorage.Shared.Config)
 
@@ -133,6 +134,56 @@ for _, rig in EnemyRigsFolder:GetChildren() do
   end
 end
 
+local ENEMY_COLLISION_GROUP = 'EnemyNPC'
+local PLAYER_COLLISION_GROUP = 'Players'
+
+pcall(function()
+  PhysicsService:RegisterCollisionGroup(ENEMY_COLLISION_GROUP)
+end)
+pcall(function()
+  PhysicsService:RegisterCollisionGroup(PLAYER_COLLISION_GROUP)
+end)
+
+PhysicsService:CollisionGroupSetCollidable(ENEMY_COLLISION_GROUP, PLAYER_COLLISION_GROUP, false)
+PhysicsService:CollisionGroupSetCollidable(ENEMY_COLLISION_GROUP, ENEMY_COLLISION_GROUP, false)
+
+local function setModelCollisionGroup(model: Model, groupName: string, enemyPhysics: boolean)
+  for _, descendant in model:GetDescendants() do
+    if descendant:IsA('BasePart') then
+      descendant.CollisionGroup = groupName
+      if enemyPhysics then
+        descendant.Anchored = false
+        descendant.CanTouch = false
+        descendant.CanQuery = false
+        descendant.CanCollide = true
+      end
+    end
+  end
+end
+
+local function getArenaFloorTopY(): number
+  local arenaFolder = workspace:FindFirstChild('Arena')
+  if arenaFolder then
+    local floorCandidate = arenaFolder:FindFirstChild('ArenaFloor')
+    if floorCandidate and floorCandidate:IsA('BasePart') then
+      return floorCandidate.Position.Y + (floorCandidate.Size.Y * 0.5)
+    end
+  end
+  return 0
+end
+
+local function getArenaFloorPart(): BasePart?
+  local arenaFolder = workspace:FindFirstChild('Arena')
+  if not arenaFolder then
+    return nil
+  end
+  local floorCandidate = arenaFolder:FindFirstChild('ArenaFloor')
+  if floorCandidate and floorCandidate:IsA('BasePart') then
+    return floorCandidate
+  end
+  return nil
+end
+
 type EnemyTier = 'Weak' | 'Medium' | 'Strong' | 'Boss'
 
 type EnemyState = {
@@ -146,13 +197,13 @@ type EnemyState = {
   tier: EnemyTier,
   walkAnimTrack: AnimationTrack?,
   punchAnimTrack: AnimationTrack?,
-  lastAttackTime: number,
 }
 
 local activeEnemies: { [string]: EnemyState } = {}
 local replicationData: { [string]: { px: number, py: number, pz: number, hp: number, maxHp: number } } =
   {}
 local enemyLastHitBy: { [string]: number } = {}
+local enemyAttackTimers: { [string]: number } = {}
 local playerKills: { [number]: number } = {}
 
 local spawnRate = 1
@@ -238,6 +289,8 @@ local function spawnEnemy()
     model:Destroy()
     return
   end
+  humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+  humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
 
   local rootPart = model:FindFirstChild('HumanoidRootPart') :: BasePart
   if not rootPart then
@@ -245,19 +298,55 @@ local function spawnEnemy()
     return
   end
 
-  -- Random spawn position anywhere on arena
-  local spawnX = math.random(-35, 35)
-  local spawnZ = math.random(-35, 35)
-  model.Parent = workspace
+  -- Random spawn position, clamped to arena bounds and rig size.
+  local floorPart = getArenaFloorPart()
+  local spawnX = 0
+  local spawnZ = 0
+  model:PivotTo(CFrame.new(0, 0, 0))
+  local _, initialSize = model:GetBoundingBox()
+  if floorPart then
+    local halfX = floorPart.Size.X * 0.5
+    local halfZ = floorPart.Size.Z * 0.5
+    local marginX = math.max(2, (initialSize.X * 0.5) + 0.5)
+    local marginZ = math.max(2, (initialSize.Z * 0.5) + 0.5)
+    local minX = floorPart.Position.X - halfX + marginX
+    local maxX = floorPart.Position.X + halfX - marginX
+    local minZ = floorPart.Position.Z - halfZ + marginZ
+    local maxZ = floorPart.Position.Z + halfZ - marginZ
+    if minX <= maxX then
+      spawnX = minX + (maxX - minX) * math.random()
+    else
+      spawnX = floorPart.Position.X
+    end
+    if minZ <= maxZ then
+      spawnZ = minZ + (maxZ - minZ) * math.random()
+    else
+      spawnZ = floorPart.Position.Z
+    end
+  else
+    spawnX = math.random(-35, 35)
+    spawnZ = math.random(-35, 35)
+  end
 
   for _, descendant in model:GetDescendants() do
-    if descendant:IsA('BillboardGui') then
+    if
+      descendant:IsA('BillboardGui')
+      or descendant:IsA('SurfaceGui')
+      or descendant:IsA('ScreenGui')
+      or descendant:IsA('Highlight')
+      or descendant:IsA('SelectionBox')
+    then
       descendant:Destroy()
       continue
     end
+    if descendant:IsA('TextLabel') then
+      local parent = descendant.Parent
+      if parent and parent:IsA('BasePart') then
+        descendant:Destroy()
+      end
+      continue
+    end
     if descendant:IsA('BasePart') then
-      descendant.Anchored = false
-      descendant.CanCollide = false
       descendant.Massless = false
       continue
     end
@@ -273,21 +362,10 @@ local function spawnEnemy()
     end
   end
 
-  local arenaFloor: BasePart? = nil
-  local arenaFolder = workspace:FindFirstChild('Arena')
-  if arenaFolder then
-    local floorCandidate = arenaFolder:FindFirstChild('ArenaFloor')
-    if floorCandidate and floorCandidate:IsA('BasePart') then
-      arenaFloor = floorCandidate
-    end
-  end
-  local floorTopY = 0
-  if arenaFloor then
-    floorTopY = arenaFloor.Position.Y + (arenaFloor.Size.Y * 0.5)
-  end
-  local _, modelSize = model:GetBoundingBox()
-  local spawnY = floorTopY + (modelSize.Y * 0.5) + 0.05
-  model:PivotTo(CFrame.new(spawnX, spawnY, spawnZ))
+  local floorTopY = getArenaFloorTopY()
+  model:PivotTo(CFrame.new(spawnX, floorTopY + 8, spawnZ))
+  model.Parent = workspace
+  setModelCollisionGroup(model, ENEMY_COLLISION_GROUP, true)
 
   humanoid.MaxHealth = hp
   humanoid.Health = hp
@@ -327,10 +405,10 @@ local function spawnEnemy()
     tier = tier,
     walkAnimTrack = walkTrack,
     punchAnimTrack = punchTrack,
-    lastAttackTime = 0,
   }
 
   activeEnemies[id] = enemyState
+  enemyAttackTimers[id] = 0
 
   -- Death handling
   humanoid.Died:Connect(function()
@@ -359,12 +437,17 @@ local function spawnEnemy()
     activeEnemies[id] = nil
     replicationData[id] = nil
     enemyLastHitBy[id] = nil
+    enemyAttackTimers[id] = nil
     model:Destroy()
   end)
 end
 
 -- Enemy AI loop
 local function updateEnemyAI()
+  local ATTACK_RANGE = 5
+  local STOP_BUFFER = 1.5
+  local FALL_RESET_DISTANCE = 6
+
   for id, enemy in activeEnemies do
     if not enemy.model.Parent then
       activeEnemies[id] = nil
@@ -391,28 +474,46 @@ local function updateEnemyAI()
     end
 
     if nearestPlayer then
+      setModelCollisionGroup(enemy.model, ENEMY_COLLISION_GROUP, true)
+      local floorTopY = getArenaFloorTopY()
+      local minAllowedY = floorTopY - FALL_RESET_DISTANCE
+      if enemy.rootPart.Position.Y < minAllowedY then
+        enemy.model:PivotTo(
+          CFrame.new(enemy.rootPart.Position.X, floorTopY + 8, enemy.rootPart.Position.Z)
+        )
+        enemy.rootPart.AssemblyLinearVelocity = Vector3.zero
+        enemy.rootPart.AssemblyAngularVelocity = Vector3.zero
+      end
+
       local char = nearestPlayer.Character
       if char then
         local targetRoot = char:FindFirstChild('HumanoidRootPart') :: BasePart
         if targetRoot then
-          enemy.humanoid:MoveTo(targetRoot.Position)
-          -- Attack if close
-          if nearestDist < 6 then
+          if nearestDist > ATTACK_RANGE + STOP_BUFFER then
+            local angle = (tonumber(id:sub(1, 4), 16) or 0) % (math.pi * 2)
+            local offset = Vector3.new(math.cos(angle) * 2, 0, math.sin(angle) * 2)
+            local targetPos = targetRoot.Position + offset
+            enemy.humanoid:MoveTo(targetPos)
+            if enemy.walkAnimTrack and not enemy.walkAnimTrack.IsPlaying then
+              enemy.walkAnimTrack:Play()
+            end
+          else
+            enemy.humanoid:MoveTo(enemy.rootPart.Position)
+            if enemy.walkAnimTrack and enemy.walkAnimTrack.IsPlaying then
+              enemy.walkAnimTrack:Stop()
+            end
+
             local playerHumanoid = char:FindFirstChildOfClass('Humanoid')
             local now = tick()
-            if playerHumanoid and (now - enemy.lastAttackTime) >= 0.9 then
-              enemy.lastAttackTime = now
-              if enemy.walkAnimTrack and enemy.walkAnimTrack.IsPlaying then
-                enemy.walkAnimTrack:Stop()
-              end
+            local lastAttack = enemyAttackTimers[id] or 0
+            if playerHumanoid and (now - lastAttack) >= 0.9 then
+              enemyAttackTimers[id] = now
               if enemy.punchAnimTrack then
                 enemy.punchAnimTrack:Stop()
                 enemy.punchAnimTrack:Play(0.05, 1, 1)
               end
               playerHumanoid:TakeDamage(enemy.damage)
             end
-          elseif enemy.walkAnimTrack and not enemy.walkAnimTrack.IsPlaying then
-            enemy.walkAnimTrack:Play()
           end
         end
       end
@@ -512,6 +613,7 @@ end
 
 -- Water gun fire loop per player
 local playerGunTimers: { [number]: number } = {}
+local playerGunTargetIds: { [number]: string } = {}
 
 RunService.Heartbeat:Connect(function(dt: number)
   if not roundActive then
@@ -530,41 +632,54 @@ RunService.Heartbeat:Connect(function(dt: number)
     local uid = player.UserId
     playerGunTimers[uid] = (playerGunTimers[uid] or 0) + dt
 
-    if playerGunTimers[uid] >= (1 / Config.WATER_GUN_FIRE_RATE) then
-      playerGunTimers[uid] = 0
-
-      local beamOrigin = root.Position
-      local waterGun = char:FindFirstChild('Water Gun')
-      if waterGun and waterGun:IsA('Model') then
-        local gunPrimaryPart = waterGun.PrimaryPart or waterGun:FindFirstChildWhichIsA('BasePart')
-        if gunPrimaryPart then
-          beamOrigin = gunPrimaryPart.Position
-        end
+    local beamOrigin = root.Position
+    local waterGun = char:FindFirstChild('Water Gun')
+    if waterGun and waterGun:IsA('Model') then
+      local gunPrimaryPart = waterGun.PrimaryPart or waterGun:FindFirstChildWhichIsA('BasePart')
+      if gunPrimaryPart then
+        beamOrigin = gunPrimaryPart.Position
       end
+    end
 
-      local id, enemy = getNearestEnemy(beamOrigin)
-      local humanoidRootPart = root
-      local waterGun = char:FindFirstChild('Water Gun')
-      if waterGun and enemy then
-        local gunPart = waterGun.PrimaryPart
-        if gunPart then
-          local weld = humanoidRootPart:FindFirstChildOfClass('Weld')
-          if weld then
-            local targetPos = enemy.rootPart.Position
-            local gunWorldPos = humanoidRootPart.CFrame * CFrame.new(0, 4, 0.5)
-            local lookDir = (targetPos - gunWorldPos.Position)
+    local targetId = playerGunTargetIds[uid]
+    local targetEnemy = if targetId then activeEnemies[targetId] else nil
+    if not targetEnemy then
+      local nearestId, nearestEnemy = getNearestEnemy(beamOrigin)
+      if nearestId and nearestEnemy then
+        targetId = nearestId
+        targetEnemy = nearestEnemy
+        playerGunTargetIds[uid] = nearestId
+      else
+        playerGunTargetIds[uid] = nil
+      end
+    end
+
+    local humanoidRootPart = root
+    if waterGun and targetEnemy then
+      local gunPart = waterGun.PrimaryPart
+      if gunPart then
+        local weld = humanoidRootPart:FindFirstChildOfClass('Weld')
+        if weld then
+          local targetPos = targetEnemy.rootPart.Position
+          local gunWorldPos = humanoidRootPart.CFrame * CFrame.new(0, 4, 0.5)
+          local lookDir = targetPos - gunWorldPos.Position
+          if lookDir.Magnitude > 0.001 then
             lookDir = Vector3.new(lookDir.X, 0, lookDir.Z).Unit
-            local angle = math.atan2(-lookDir.X, -lookDir.Z) + math.pi * 0.5
+            local angle = math.atan2(-lookDir.X, -lookDir.Z) + math.pi * 1.5
             weld.C0 = CFrame.new(0, 4, 0.5) * CFrame.Angles(0, angle, 0)
           end
         end
       end
+    end
 
-      if id and enemy then
+    if playerGunTimers[uid] >= (1 / Config.WATER_GUN_FIRE_RATE) then
+      playerGunTimers[uid] = 0
+
+      if targetId and targetEnemy then
         local dmg = getPlayerDamage(player)
-        enemyLastHitBy[id] = uid
-        enemy.humanoid:TakeDamage(dmg)
-        BeamUpdateRemote:FireAllClients(beamOrigin, enemy.rootPart.Position)
+        enemyLastHitBy[targetId] = uid
+        targetEnemy.humanoid:TakeDamage(dmg)
+        BeamUpdateRemote:FireAllClients(beamOrigin, targetEnemy.rootPart.Position)
       else
         BeamUpdateRemote:FireAllClients(nil, nil)
       end
@@ -574,6 +689,7 @@ end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
   playerGunTimers[player.UserId] = nil
+  playerGunTargetIds[player.UserId] = nil
 end)
 
 -- KillAll + SpawnControls + RoundStarted Remote
@@ -647,6 +763,8 @@ Players.PlayerAdded:Connect(function(player: Player)
   loadData(player)
   playerKills[player.UserId] = 0
   player.CharacterAdded:Connect(function(character: Model)
+    setModelCollisionGroup(character, PLAYER_COLLISION_GROUP, false)
+
     local humanoid = character:WaitForChild('Humanoid') :: Humanoid
     local humanoidRootPart = character:WaitForChild('HumanoidRootPart') :: BasePart
     local pdata = playerData[player.UserId]
@@ -658,14 +776,16 @@ Players.PlayerAdded:Connect(function(player: Player)
     local waterGunModelTemplate = ServerStorage:FindFirstChild('Water Gun')
     if waterGunModelTemplate and waterGunModelTemplate:IsA('Model') then
       local clonedGun = waterGunModelTemplate:Clone()
-      local gunPrimaryPart: BasePart? = nil
-      local largestVolume = 0
-      for _, descendant in clonedGun:GetDescendants() do
-        if descendant:IsA('BasePart') then
-          local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
-          if volume > largestVolume then
-            largestVolume = volume
-            gunPrimaryPart = descendant
+      local gunPrimaryPart: BasePart? = clonedGun.PrimaryPart
+      if not gunPrimaryPart then
+        local largestVolume = 0
+        for _, descendant in clonedGun:GetDescendants() do
+          if descendant:IsA('BasePart') then
+            local volume = descendant.Size.X * descendant.Size.Y * descendant.Size.Z
+            if volume > largestVolume then
+              largestVolume = volume
+              gunPrimaryPart = descendant
+            end
           end
         end
       end
