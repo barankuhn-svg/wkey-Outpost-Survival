@@ -146,6 +146,7 @@ type EnemyState = {
   tier: EnemyTier,
   walkAnimTrack: AnimationTrack?,
   punchAnimTrack: AnimationTrack?,
+  lastAttackTime: number,
 }
 
 local activeEnemies: { [string]: EnemyState } = {}
@@ -245,9 +246,48 @@ local function spawnEnemy()
   end
 
   -- Random spawn position anywhere on arena
-  local spawnPos = Vector3.new(math.random(-35, 35), 2, math.random(-35, 35))
-  model:PivotTo(CFrame.new(spawnPos))
+  local spawnX = math.random(-35, 35)
+  local spawnZ = math.random(-35, 35)
   model.Parent = workspace
+
+  for _, descendant in model:GetDescendants() do
+    if descendant:IsA('BillboardGui') then
+      descendant:Destroy()
+      continue
+    end
+    if descendant:IsA('BasePart') then
+      descendant.Anchored = false
+      descendant.CanCollide = false
+      descendant.Massless = false
+      continue
+    end
+    if
+      descendant:IsA('BodyMover')
+      or descendant:IsA('AlignPosition')
+      or descendant:IsA('AlignOrientation')
+      or descendant:IsA('LinearVelocity')
+      or descendant:IsA('AngularVelocity')
+      or descendant:IsA('VectorForce')
+    then
+      descendant:Destroy()
+    end
+  end
+
+  local arenaFloor: BasePart? = nil
+  local arenaFolder = workspace:FindFirstChild('Arena')
+  if arenaFolder then
+    local floorCandidate = arenaFolder:FindFirstChild('ArenaFloor')
+    if floorCandidate and floorCandidate:IsA('BasePart') then
+      arenaFloor = floorCandidate
+    end
+  end
+  local floorTopY = 0
+  if arenaFloor then
+    floorTopY = arenaFloor.Position.Y + (arenaFloor.Size.Y * 0.5)
+  end
+  local _, modelSize = model:GetBoundingBox()
+  local spawnY = floorTopY + (modelSize.Y * 0.5) + 0.05
+  model:PivotTo(CFrame.new(spawnX, spawnY, spawnZ))
 
   humanoid.MaxHealth = hp
   humanoid.Health = hp
@@ -287,6 +327,7 @@ local function spawnEnemy()
     tier = tier,
     walkAnimTrack = walkTrack,
     punchAnimTrack = punchTrack,
+    lastAttackTime = 0,
   }
 
   activeEnemies[id] = enemyState
@@ -356,11 +397,22 @@ local function updateEnemyAI()
         if targetRoot then
           enemy.humanoid:MoveTo(targetRoot.Position)
           -- Attack if close
-          if nearestDist < 5 then
+          if nearestDist < 6 then
             local playerHumanoid = char:FindFirstChildOfClass('Humanoid')
-            if playerHumanoid then
-              playerHumanoid:TakeDamage(enemy.damage * (1 / 20))
+            local now = tick()
+            if playerHumanoid and (now - enemy.lastAttackTime) >= 0.9 then
+              enemy.lastAttackTime = now
+              if enemy.walkAnimTrack and enemy.walkAnimTrack.IsPlaying then
+                enemy.walkAnimTrack:Stop()
+              end
+              if enemy.punchAnimTrack then
+                enemy.punchAnimTrack:Stop()
+                enemy.punchAnimTrack:Play(0.05, 1, 1)
+              end
+              playerHumanoid:TakeDamage(enemy.damage)
             end
+          elseif enemy.walkAnimTrack and not enemy.walkAnimTrack.IsPlaying then
+            enemy.walkAnimTrack:Play()
           end
         end
       end
@@ -560,6 +612,15 @@ StartRoundRemote.OnServerEvent:Connect(function(_player: Player)
     local pdata = playerData[p.UserId]
     if pdata then
       CoinUpdateRemote:FireClient(p, pdata.coins)
+    end
+    local char = p.Character
+    if char then
+      local humanoid = char:FindFirstChildOfClass('Humanoid')
+      if humanoid then
+        local upgrades = pdata and pdata.hpUpgrades or 0
+        humanoid.MaxHealth = Config.DEFAULT_HP + (upgrades * Config.HP_PER_UPGRADE)
+        humanoid.Health = humanoid.MaxHealth
+      end
     end
   end
   RoundStartedRemote:FireAllClients()

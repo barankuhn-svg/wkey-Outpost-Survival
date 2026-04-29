@@ -230,6 +230,15 @@ local FloatingCoinRemote = Remotes:WaitForChild('FloatingCoin') :: RemoteEvent
 
 local localEnemyParts: { [string]: { root: Part, hpBar: Frame?, hpFill: Frame? } } = {}
 
+local function clearLocalEnemyParts()
+  for id, parts in localEnemyParts do
+    if parts.root and parts.root.Parent then
+      parts.root:Destroy()
+    end
+    localEnemyParts[id] = nil
+  end
+end
+
 local function createLocalEnemy(id: string)
   local root = Instance.new('Part')
   root.Name = 'EnemyVisual_' .. id
@@ -395,8 +404,19 @@ local difficultyProgressFill: Frame? = nil
 local hpBarFill: Frame? = nil
 local inGameCoinsLabel: TextLabel? = nil
 local inGameGui: ScreenGui? = nil
+local hpBarUpdateConn: RBXScriptConnection? = nil
 
 local function buildInGameUI(playerHumanoid: Humanoid)
+  if hpBarUpdateConn then
+    hpBarUpdateConn:Disconnect()
+    hpBarUpdateConn = nil
+  end
+
+  if inGameGui then
+    inGameGui:Destroy()
+    inGameGui = nil
+  end
+
   local screenGui = Instance.new('ScreenGui')
   screenGui.Name = 'InGameGui'
   screenGui.ResetOnSpawn = false
@@ -720,9 +740,10 @@ local function buildInGameUI(playerHumanoid: Humanoid)
   end)
 
   -- HP bar update loop
-  game:GetService('RunService').Heartbeat:Connect(function()
-    if playerHumanoid and hpBarFill then
-      local ratio = math.clamp(playerHumanoid.Health / playerHumanoid.MaxHealth, 0, 1)
+  hpBarUpdateConn = game:GetService('RunService').Heartbeat:Connect(function()
+    if playerHumanoid and hpBarFill and playerHumanoid.Parent then
+      local maxHealth = math.max(playerHumanoid.MaxHealth, 1)
+      local ratio = math.clamp(playerHumanoid.Health / maxHealth, 0, 1)
       hpBarFill.Size = UDim2.fromScale(ratio, 1)
     end
   end)
@@ -732,12 +753,29 @@ end
 local roundStartClientTime = 0
 local inRound = false
 
+local function getAliveHumanoid(): Humanoid
+  while true do
+    local character = player.Character
+    if character then
+      local humanoid = character:FindFirstChildOfClass('Humanoid')
+      if humanoid and humanoid.Health > 0 then
+        return humanoid
+      end
+    end
+    local nextCharacter = player.CharacterAdded:Wait()
+    local nextHumanoid = nextCharacter:WaitForChild('Humanoid') :: Humanoid
+    if nextHumanoid.Health > 0 then
+      return nextHumanoid
+    end
+  end
+end
+
 local RoundStartedRemote = Remotes:WaitForChild('RoundStarted') :: RemoteEvent
 RoundStartedRemote.OnClientEvent:Connect(function()
+  clearLocalEnemyParts()
   inRound = true
   roundStartClientTime = tick()
-  local char = player.Character or player.CharacterAdded:Wait()
-  local humanoid = char:WaitForChild('Humanoid') :: Humanoid
+  local humanoid = getAliveHumanoid()
   buildInGameUI(humanoid)
 end)
 
@@ -787,6 +825,11 @@ end)
 local PlayerDiedRemote = Remotes:WaitForChild('PlayerDied') :: RemoteEvent
 
 local function buildDeathScreen(elapsed: number, coins: number, kills: number, difficulty: string)
+  clearLocalEnemyParts()
+  if hpBarUpdateConn then
+    hpBarUpdateConn:Disconnect()
+    hpBarUpdateConn = nil
+  end
   if inGameGui then
     inGameGui:Destroy()
     inGameGui = nil
