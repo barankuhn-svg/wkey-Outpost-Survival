@@ -492,3 +492,27 @@ end)
 Players.PlayerRemoving:Connect(function(player: Player)
   playerGunTimers[player.UserId] = nil
 end)
+
+-- KillAll + SpawnControls + RoundStarted Remote
+local KillAllRemote = Instance.new('RemoteEvent')
+KillAllRemote.Name = 'KillAll'
+KillAllRemote.Parent = Remotes
+
+local RoundStartedRemote = Instance.new('RemoteEvent')
+RoundStartedRemote.Name = 'RoundStarted'
+RoundStartedRemote.Parent = Remotes
+
+KillAllRemote.OnServerEvent:Connect(function(_player: Player)
+  for id, enemy in activeEnemies do
+    if enemy.model.Parent then
+      enemy.humanoid.Health = 0
+    end
+  end
+end)
+
+-- Fire RoundStarted to all clients when round begins
+StartRoundRemote.OnServerEvent:Connect(function(player: Player)
+  roundActive = true
+  roundStartTime = tick()
+  RoundStartedRemote:FireAllClients()
+end)

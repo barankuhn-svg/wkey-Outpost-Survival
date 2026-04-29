@@ -344,4 +344,242 @@ BeamUpdateRemote2.OnClientEvent:Connect(function(originPos: Vector3?, targetPos:
   end
 end)
 
+-- IN-GAME UI
+local roundTimerLabel: TextLabel? = nil
+local difficultyLabel: TextLabel? = nil
+local hpBarFill: Frame? = nil
+local inGameCoinsLabel: TextLabel? = nil
+local inGameGui: ScreenGui? = nil
+
+local function buildInGameUI(playerHumanoid: Humanoid)
+  local screenGui = Instance.new('ScreenGui')
+  screenGui.Name = 'InGameGui'
+  screenGui.ResetOnSpawn = false
+  screenGui.IgnoreGuiInset = true
+  screenGui.Parent = playerGui
+  inGameGui = screenGui
+
+  -- Top center: Timer + Difficulty
+  local topCenter = Instance.new('Frame')
+  topCenter.Name = 'TopCenter'
+  topCenter.Size = UDim2.fromScale(0.3, 0.07)
+  topCenter.Position = UDim2.fromScale(0.35, 0.02)
+  topCenter.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
+  topCenter.BorderSizePixel = 0
+  topCenter.Parent = screenGui
+
+  local topCorner = Instance.new('UICorner')
+  topCorner.CornerRadius = UDim.new(0, 10)
+  topCorner.Parent = topCenter
+
+  local timerLabel = Instance.new('TextLabel')
+  timerLabel.Name = 'TimerLabel'
+  timerLabel.Size = UDim2.fromScale(1, 0.5)
+  timerLabel.Position = UDim2.fromScale(0, 0)
+  timerLabel.BackgroundTransparency = 1
+  timerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+  timerLabel.TextScaled = true
+  timerLabel.Font = Enum.Font.GothamBold
+  timerLabel.Text = '00:00'
+  timerLabel.Parent = topCenter
+  roundTimerLabel = timerLabel
+
+  local diffLabel = Instance.new('TextLabel')
+  diffLabel.Name = 'DifficultyLabel'
+  diffLabel.Size = UDim2.fromScale(1, 0.5)
+  diffLabel.Position = UDim2.fromScale(0, 0.5)
+  diffLabel.BackgroundTransparency = 1
+  diffLabel.TextColor3 = Color3.fromRGB(0, 200, 0)
+  diffLabel.TextScaled = true
+  diffLabel.Font = Enum.Font.GothamBold
+  diffLabel.Text = 'Easy'
+  diffLabel.Parent = topCenter
+  difficultyLabel = diffLabel
+
+  -- Top left: Coins + HP
+  local topLeft = Instance.new('Frame')
+  topLeft.Name = 'TopLeft'
+  topLeft.Size = UDim2.fromScale(0.2, 0.12)
+  topLeft.Position = UDim2.fromScale(0.01, 0.02)
+  topLeft.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
+  topLeft.BorderSizePixel = 0
+  topLeft.Parent = screenGui
+
+  local tlCorner = Instance.new('UICorner')
+  tlCorner.CornerRadius = UDim.new(0, 10)
+  tlCorner.Parent = topLeft
+
+  local coinsLabel = Instance.new('TextLabel')
+  coinsLabel.Name = 'CoinsLabel'
+  coinsLabel.Size = UDim2.fromScale(1, 0.4)
+  coinsLabel.Position = UDim2.fromScale(0, 0.05)
+  coinsLabel.BackgroundTransparency = 1
+  coinsLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+  coinsLabel.TextScaled = true
+  coinsLabel.Font = Enum.Font.GothamBold
+  coinsLabel.Text = '🪙 0'
+  coinsLabel.Parent = topLeft
+  inGameCoinsLabel = coinsLabel
+
+  local hpLabel = Instance.new('TextLabel')
+  hpLabel.Size = UDim2.fromScale(1, 0.2)
+  hpLabel.Position = UDim2.fromScale(0, 0.48)
+  hpLabel.BackgroundTransparency = 1
+  hpLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  hpLabel.TextScaled = true
+  hpLabel.Font = Enum.Font.Gotham
+  hpLabel.Text = '❤️ HP'
+  hpLabel.Parent = topLeft
+
+  local hpBarBg = Instance.new('Frame')
+  hpBarBg.Size = UDim2.fromScale(0.9, 0.2)
+  hpBarBg.Position = UDim2.fromScale(0.05, 0.72)
+  hpBarBg.BackgroundColor3 = Color3.fromRGB(60, 0, 0)
+  hpBarBg.BorderSizePixel = 0
+  hpBarBg.Parent = topLeft
+
+  local hpCorner = Instance.new('UICorner')
+  hpCorner.CornerRadius = UDim.new(0, 6)
+  hpCorner.Parent = hpBarBg
+
+  local hpFill = Instance.new('Frame')
+  hpFill.Name = 'HpFill'
+  hpFill.Size = UDim2.fromScale(1, 1)
+  hpFill.BackgroundColor3 = Color3.fromRGB(220, 0, 0)
+  hpFill.BorderSizePixel = 0
+  hpFill.Parent = hpBarBg
+  hpBarFill = hpFill
+
+  local hpFillCorner = Instance.new('UICorner')
+  hpFillCorner.CornerRadius = UDim.new(0, 6)
+  hpFillCorner.Parent = hpFill
+
+  -- Right side: Spawn controls
+  local rightPanel = Instance.new('Frame')
+  rightPanel.Name = 'RightPanel'
+  rightPanel.Size = UDim2.fromScale(0.18, 0.35)
+  rightPanel.Position = UDim2.fromScale(0.81, 0.3)
+  rightPanel.BackgroundColor3 = Color3.fromRGB(20, 20, 40)
+  rightPanel.BorderSizePixel = 0
+  rightPanel.Parent = screenGui
+
+  local rpCorner = Instance.new('UICorner')
+  rpCorner.CornerRadius = UDim.new(0, 10)
+  rpCorner.Parent = rightPanel
+
+  local rpLayout = Instance.new('UIListLayout')
+  rpLayout.Padding = UDim.new(0, 6)
+  rpLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+  rpLayout.Parent = rightPanel
+
+  local rpPadding = Instance.new('UIPadding')
+  rpPadding.PaddingTop = UDim.new(0, 8)
+  rpPadding.PaddingLeft = UDim.new(0, 8)
+  rpPadding.PaddingRight = UDim.new(0, 8)
+  rpPadding.Parent = rightPanel
+
+  local spawnRateLabel = Instance.new('TextLabel')
+  spawnRateLabel.Size = UDim2.new(1, 0, 0, 24)
+  spawnRateLabel.BackgroundTransparency = 1
+  spawnRateLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  spawnRateLabel.TextScaled = true
+  spawnRateLabel.Font = Enum.Font.Gotham
+  spawnRateLabel.Text = 'Spawn Rate: 1/s'
+  spawnRateLabel.Name = 'SpawnRateLabel'
+  spawnRateLabel.Parent = rightPanel
+
+  local SpawnRateRemote = Instance.new('RemoteEvent')
+  SpawnRateRemote.Name = 'SetSpawnRate'
+
+  local spawnRateSlider = Instance.new('TextButton')
+  spawnRateSlider.Size = UDim2.new(1, 0, 0, 28)
+  spawnRateSlider.BackgroundColor3 = Color3.fromRGB(40, 40, 80)
+  spawnRateSlider.TextColor3 = Color3.fromRGB(255, 255, 255)
+  spawnRateSlider.TextScaled = true
+  spawnRateSlider.Font = Enum.Font.Gotham
+  spawnRateSlider.Text = 'Rate -  +'
+  spawnRateSlider.Parent = rightPanel
+
+  local maxEnemiesLabel = Instance.new('TextLabel')
+  maxEnemiesLabel.Size = UDim2.new(1, 0, 0, 24)
+  maxEnemiesLabel.BackgroundTransparency = 1
+  maxEnemiesLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+  maxEnemiesLabel.TextScaled = true
+  maxEnemiesLabel.Font = Enum.Font.Gotham
+  maxEnemiesLabel.Text = 'Max: 20'
+  maxEnemiesLabel.Name = 'MaxEnemiesLabel'
+  maxEnemiesLabel.Parent = rightPanel
+
+  local killAllBtn = Instance.new('TextButton')
+  killAllBtn.Size = UDim2.new(1, 0, 0, 32)
+  killAllBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+  killAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+  killAllBtn.TextScaled = true
+  killAllBtn.Font = Enum.Font.GothamBold
+  killAllBtn.Text = 'KILL ALL'
+  killAllBtn.Parent = rightPanel
+
+  local kaCorner = Instance.new('UICorner')
+  kaCorner.CornerRadius = UDim.new(0, 8)
+  kaCorner.Parent = killAllBtn
+
+  -- Wire up Kill All
+  local KillAllRemote = Remotes:WaitForChild('KillAll') :: RemoteEvent
+  killAllBtn.MouseButton1Click:Connect(function()
+    KillAllRemote:FireServer()
+  end)
+
+  -- HP bar update loop
+  game:GetService('RunService').Heartbeat:Connect(function()
+    if playerHumanoid and hpBarFill then
+      local ratio = math.clamp(playerHumanoid.Health / playerHumanoid.MaxHealth, 0, 1)
+      hpBarFill.Size = UDim2.fromScale(ratio, 1)
+    end
+  end)
+end
+
+-- Timer + Difficulty update loop
+local roundStartClientTime = 0
+local inRound = false
+
+local RoundStartedRemote = Remotes:WaitForChild('RoundStarted') :: RemoteEvent
+RoundStartedRemote.OnClientEvent:Connect(function()
+  inRound = true
+  roundStartClientTime = tick()
+  local char = player.Character or player.CharacterAdded:Wait()
+  local humanoid = char:WaitForChild('Humanoid') :: Humanoid
+  buildInGameUI(humanoid)
+end)
+
+game:GetService('RunService').Heartbeat:Connect(function()
+  if not inRound then
+    return
+  end
+  if not roundTimerLabel then
+    return
+  end
+
+  local elapsed = tick() - roundStartClientTime
+  local minutes = math.floor(elapsed / 60)
+  local seconds = math.floor(elapsed % 60)
+  roundTimerLabel.Text = string.format('%02d:%02d', minutes, seconds)
+
+  local currentDiff = Config.DIFFICULTY[1]
+  for _, diff in Config.DIFFICULTY do
+    if elapsed >= diff.time then
+      currentDiff = diff
+    end
+  end
+  if difficultyLabel then
+    difficultyLabel.Text = currentDiff.label
+    difficultyLabel.TextColor3 = currentDiff.color
+  end
+end)
+
+CoinUpdateRemote.OnClientEvent:Connect(function(newCoins: number)
+  if inGameCoinsLabel then
+    inGameCoinsLabel.Text = '🪙 ' .. tostring(newCoins)
+  end
+end)
+
 buildMenuUI()
