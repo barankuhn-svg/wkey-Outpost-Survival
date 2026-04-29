@@ -46,18 +46,12 @@ local function saveData(player: Player)
   end)
 end
 
-Players.PlayerAdded:Connect(function(player: Player)
-  loadData(player)
-end)
-
 Players.PlayerRemoving:Connect(function(player: Player)
   saveData(player)
   playerData[player.UserId] = nil
 end)
 
 -- RemoteEvents Setup
-local ReplicatedStorage = game:GetService('ReplicatedStorage')
-
 local Remotes = Instance.new('Folder')
 Remotes.Name = 'Remotes'
 Remotes.Parent = ReplicatedStorage
@@ -211,7 +205,11 @@ local function spawnEnemy()
   if not roundActive then
     return
   end
-  if #activeEnemies >= maxEnemies then
+  local enemyCount = 0
+  for _ in activeEnemies do
+    enemyCount += 1
+  end
+  if enemyCount >= maxEnemies then
     return
   end
 
@@ -417,39 +415,7 @@ RunService.Heartbeat:Connect(function(dt: number)
   end
 end)
 
--- StartRound handler
-StartRoundRemote.OnServerEvent:Connect(function(player: Player)
-  roundActive = true
-  roundStartTime = tick()
-end)
-
--- Player death handling
-Players.PlayerAdded:Connect(function(player: Player)
-  player.CharacterAdded:Connect(function(character: Model)
-    local humanoid = character:WaitForChild('Humanoid') :: Humanoid
-    local pdata = playerData[player.UserId]
-    if pdata then
-      humanoid.MaxHealth = Config.DEFAULT_HP + (pdata.hpUpgrades * Config.HP_PER_UPGRADE)
-      humanoid.Health = humanoid.MaxHealth
-    end
-    humanoid.Died:Connect(function()
-      roundActive = false
-      for id, enemy in activeEnemies do
-        if enemy.model.Parent then
-          enemy.model:Destroy()
-        end
-        activeEnemies[id] = nil
-        replicationData[id] = nil
-      end
-    end)
-  end)
-end)
-
 -- WATER GUN SYSTEM
-local WaterGunHitRemote = Instance.new('RemoteEvent')
-WaterGunHitRemote.Name = 'WaterGunHit'
-WaterGunHitRemote.Parent = Remotes
-
 local BeamUpdateRemote = Instance.new('RemoteEvent')
 BeamUpdateRemote.Name = 'BeamUpdate'
 BeamUpdateRemote.Parent = Remotes
@@ -534,7 +500,7 @@ RoundStartedRemote.Name = 'RoundStarted'
 RoundStartedRemote.Parent = Remotes
 
 KillAllRemote.OnServerEvent:Connect(function(_player: Player)
-  for id, enemy in activeEnemies do
+  for _, enemy in activeEnemies do
     if enemy.model.Parent then
       enemy.humanoid.Health = 0
     end
@@ -549,7 +515,7 @@ SetSpawnRateRemote.OnServerEvent:Connect(
 )
 
 -- Fire RoundStarted to all clients when round begins
-StartRoundRemote.OnServerEvent:Connect(function(player: Player)
+StartRoundRemote.OnServerEvent:Connect(function(_player: Player)
   roundActive = true
   roundStartTime = tick()
   RoundStartedRemote:FireAllClients()
@@ -573,6 +539,7 @@ end
 -- Track kills per player
 
 Players.PlayerAdded:Connect(function(player: Player)
+  loadData(player)
   playerKills[player.UserId] = 0
   player.CharacterAdded:Connect(function(character: Model)
     local humanoid = character:WaitForChild('Humanoid') :: Humanoid
@@ -607,16 +574,6 @@ Players.PlayerAdded:Connect(function(player: Player)
       onPlayerDied(player, elapsed, coins, kills, currentDiff.label)
     end)
   end)
-end)
-
--- Track kills: increment when enemy dies
--- Patch into humanoid.Died in spawnEnemy by firing this remote
-local KillCountRemote = Instance.new('RemoteEvent')
-KillCountRemote.Name = 'KillCount'
-KillCountRemote.Parent = Remotes
-
-KillCountRemote.OnServerEvent:Connect(function(player: Player)
-  playerKills[player.UserId] = (playerKills[player.UserId] or 0) + 1
 end)
 
 Players.PlayerRemoving:Connect(function(player: Player)
