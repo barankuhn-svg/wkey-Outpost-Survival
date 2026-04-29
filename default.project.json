@@ -1,0 +1,23 @@
+{
+  "name": "wkey-Outpost-Survival",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      }
+    }
+  }
+}

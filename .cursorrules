@@ -1,0 +1,6 @@
+Luau strict mode only.
+One server script, one client script architecture.
+Mobile-first UI.
+No tool names in code or commits.
+Commit format: feat: <description>
+2 space indent, camelCase vars, PascalCase types.
