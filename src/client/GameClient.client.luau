@@ -285,4 +285,63 @@ FloatingCoinRemote.OnClientEvent:Connect(function(pos: Vector3, amount: number)
   end)
 end)
 
+local BeamUpdateRemote2 = Remotes:WaitForChild('BeamUpdate') :: RemoteEvent
+
+-- Beam visuals
+local beamOriginPart = Instance.new('Part')
+beamOriginPart.Name = 'BeamOrigin'
+beamOriginPart.Size = Vector3.one * 0.1
+beamOriginPart.Anchored = true
+beamOriginPart.CanCollide = false
+beamOriginPart.Transparency = 1
+beamOriginPart.Parent = workspace
+
+local beamTargetPart = Instance.new('Part')
+beamTargetPart.Name = 'BeamTarget'
+beamTargetPart.Size = Vector3.one * 0.1
+beamTargetPart.Anchored = true
+beamTargetPart.CanCollide = false
+beamTargetPart.Transparency = 1
+beamTargetPart.Parent = workspace
+
+local beamAttachment0 = Instance.new('Attachment')
+beamAttachment0.Parent = beamOriginPart
+
+local beamAttachment1 = Instance.new('Attachment')
+beamAttachment1.Parent = beamTargetPart
+
+local waterBeam = Instance.new('Beam')
+waterBeam.Attachment0 = beamAttachment0
+waterBeam.Attachment1 = beamAttachment1
+waterBeam.Color = ColorSequence.new(Color3.fromRGB(0, 200, 255))
+waterBeam.Transparency = NumberSequence.new(0.2)
+waterBeam.Width0 = 0.3
+waterBeam.Width1 = 0.3
+waterBeam.FaceCamera = true
+waterBeam.Enabled = false
+waterBeam.Parent = workspace
+
+local beamHideTimer = 0
+local BEAM_SHOW_DURATION = 0.15
+
+game:GetService('RunService').Heartbeat:Connect(function(dt: number)
+  if waterBeam.Enabled then
+    beamHideTimer -= dt
+    if beamHideTimer <= 0 then
+      waterBeam.Enabled = false
+    end
+  end
+end)
+
+BeamUpdateRemote2.OnClientEvent:Connect(function(originPos: Vector3?, targetPos: Vector3?)
+  if originPos and targetPos then
+    beamOriginPart.Position = originPos
+    beamTargetPart.Position = targetPos
+    waterBeam.Enabled = true
+    beamHideTimer = BEAM_SHOW_DURATION
+  else
+    waterBeam.Enabled = false
+  end
+end)
+
 buildMenuUI()

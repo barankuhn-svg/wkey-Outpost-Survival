@@ -418,3 +418,77 @@ Players.PlayerAdded:Connect(function(player: Player)
     end)
   end)
 end)
+
+-- WATER GUN SYSTEM
+local WaterGunHitRemote = Instance.new('RemoteEvent')
+WaterGunHitRemote.Name = 'WaterGunHit'
+WaterGunHitRemote.Parent = Remotes
+
+local BeamUpdateRemote = Instance.new('RemoteEvent')
+BeamUpdateRemote.Name = 'BeamUpdate'
+BeamUpdateRemote.Parent = Remotes
+
+local function getPlayerDamage(player: Player): number
+  local pdata = playerData[player.UserId]
+  if not pdata then
+    return Config.DEFAULT_DAMAGE
+  end
+  return Config.DEFAULT_DAMAGE + (pdata.damageUpgrades * Config.DAMAGE_PER_UPGRADE)
+end
+
+local function getNearestEnemy(origin: Vector3): (string?, EnemyState?)
+  local nearestId: string? = nil
+  local nearestEnemy: EnemyState? = nil
+  local nearestDist = math.huge
+  for id, enemy in activeEnemies do
+    if not enemy.model.Parent then
+      continue
+    end
+    local dist = (enemy.rootPart.Position - origin).Magnitude
+    if dist < nearestDist and dist <= Config.WATER_GUN_RANGE then
+      nearestDist = dist
+      nearestId = id
+      nearestEnemy = enemy
+    end
+  end
+  return nearestId, nearestEnemy
+end
+
+-- Water gun fire loop per player
+local playerGunTimers: { [number]: number } = {}
+
+RunService.Heartbeat:Connect(function(dt: number)
+  if not roundActive then
+    return
+  end
+  for _, player in Players:GetPlayers() do
+    local char = player.Character
+    if not char then
+      continue
+    end
+    local root = char:FindFirstChild('HumanoidRootPart') :: BasePart
+    if not root then
+      continue
+    end
+
+    local uid = player.UserId
+    playerGunTimers[uid] = (playerGunTimers[uid] or 0) + dt
+
+    if playerGunTimers[uid] >= (1 / Config.WATER_GUN_FIRE_RATE) then
+      playerGunTimers[uid] = 0
+
+      local id, enemy = getNearestEnemy(root.Position)
+      if id and enemy then
+        local dmg = getPlayerDamage(player)
+        enemy.humanoid:TakeDamage(dmg)
+        BeamUpdateRemote:FireAllClients(root.Position, enemy.rootPart.Position)
+      else
+        BeamUpdateRemote:FireAllClients(nil, nil)
+      end
+    end
+  end
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player)
+  playerGunTimers[player.UserId] = nil
+end)
